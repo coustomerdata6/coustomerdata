@@ -15,7 +15,7 @@
 <script>
   window.PMW_CONFIG = {
     SUPABASE_URL: "https://iwjhudzsfbuhmcerzmmy.supabase.co",
-    SUPABASE_KEY: "PASTE_YOUR_LONG_eyJ_KEY_HERE"
+    SUPABASE_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im13amh1ZHpzZmJ1aG1jZXJ6bW15Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkyNTI0MjcsImV4cCI6MjA5NDgyODQyN30.A-WluAthYvW6pV7dz_pBKgmOHkUSyHt8KjDGPy8BgW8"
   };
 </script>
 <!-- ============================================================ -->
@@ -667,18 +667,74 @@ function AccountSection({
   onLogout
 }) {
   const [email, setEmail] = useState('');
+  const [showChangePw, setShowChangePw] = useState(false);
+  const [newUsername, setNewUsername] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPw, setConfirmPw] = useState('');
+  const [pwError, setPwError] = useState('');
+  const [pwSaving, setPwSaving] = useState(false);
+  const [pwSuccess, setPwSuccess] = useState('');
   useEffect(() => {
     window._supabase.auth.getUser().then(({
       data
-    }) => setEmail(data.user?.email || ''));
+    }) => {
+      const em = data.user?.email || '';
+      setEmail(em);
+      // Pre-fill username field with current username (without @palmens.local)
+      const display = em.endsWith('@palmens.local') ? em.slice(0, -14) : em;
+      setNewUsername(display);
+    });
   }, []);
+
   // Show just "admin" instead of "admin@palmens.local"
   const displayName = email.endsWith('@palmens.local') ? email.slice(0, -14) : email;
-  const changeConfig = () => {
-    if (confirm('Change Supabase config? You will need to re-enter URL and key.')) {
-      localStorage.removeItem('_pmw_supabase_url');
-      localStorage.removeItem('_pmw_supabase_key');
-      location.reload();
+  const saveChanges = async () => {
+    setPwError('');
+    setPwSuccess('');
+    const userInput = newUsername.trim().toLowerCase();
+    if (!userInput) {
+      setPwError('Username cannot be empty');
+      return;
+    }
+    if (newPassword && newPassword.length < 6) {
+      setPwError('Password must be at least 6 characters');
+      return;
+    }
+    if (newPassword !== confirmPw) {
+      setPwError('Passwords do not match');
+      return;
+    }
+    if (!newPassword && userInput === displayName) {
+      setPwError('Nothing to change');
+      return;
+    }
+    setPwSaving(true);
+    try {
+      const updates = {};
+      const newEmail = userInput.includes('@') ? userInput : userInput + '@palmens.local';
+      if (newEmail !== email) updates.email = newEmail;
+      if (newPassword) updates.password = newPassword;
+      const {
+        error
+      } = await window._supabase.auth.updateUser(updates);
+      if (error) {
+        setPwError(error.message || 'Failed to update');
+      } else {
+        setPwSuccess('Saved! ' + (newPassword ? 'Login again with the new password.' : 'Username updated.'));
+        setNewPassword('');
+        setConfirmPw('');
+        if (newPassword) {
+          // After password change, force re-login
+          setTimeout(() => onLogout(), 2000);
+        } else {
+          // Refresh email display
+          setEmail(newEmail);
+        }
+      }
+    } catch (e) {
+      setPwError('Network error: ' + (e.message || e));
+    } finally {
+      setPwSaving(false);
     }
   };
   return /*#__PURE__*/React.createElement("section", {
@@ -688,16 +744,66 @@ function AccountSection({
   }, "Account"), /*#__PURE__*/React.createElement("p", {
     className: "text-sm text-stone-600 mb-3"
   }, "Logged in as ", /*#__PURE__*/React.createElement("strong", null, displayName || '...'), "."), /*#__PURE__*/React.createElement("div", {
-    className: "flex flex-wrap gap-2"
+    className: "flex flex-wrap gap-2 mb-3"
   }, /*#__PURE__*/React.createElement("button", {
     onClick: onLogout,
     className: "px-4 py-2 bg-stone-50 border border-stone-200 rounded-md text-sm font-medium hover:bg-stone-100 inline-flex items-center gap-2"
   }, /*#__PURE__*/React.createElement(LogOut, {
     size: 14
   }), " Logout"), /*#__PURE__*/React.createElement("button", {
-    onClick: changeConfig,
-    className: "px-4 py-2 bg-white border border-stone-200 rounded-md text-sm font-medium hover:bg-stone-50 text-stone-500"
-  }, "Change database config")));
+    onClick: () => {
+      setShowChangePw(s => !s);
+      setPwError('');
+      setPwSuccess('');
+    },
+    className: "px-4 py-2 bg-white border border-stone-200 rounded-md text-sm font-medium hover:bg-stone-50 text-stone-700 inline-flex items-center gap-2"
+  }, /*#__PURE__*/React.createElement(Lock, {
+    size: 14
+  }), " ", showChangePw ? 'Cancel' : 'Change username / password')), showChangePw && /*#__PURE__*/React.createElement("div", {
+    className: "mt-3 pt-4 border-t border-stone-200 space-y-3"
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+    className: "block text-xs uppercase tracking-wider text-stone-600 mb-1"
+  }, "Username"), /*#__PURE__*/React.createElement("input", {
+    value: newUsername,
+    onChange: e => {
+      setNewUsername(e.target.value);
+      setPwError('');
+    },
+    className: "w-full px-3 py-2 bg-white border border-stone-200 rounded-md text-sm focus:outline-none focus:border-stone-500"
+  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+    className: "block text-xs uppercase tracking-wider text-stone-600 mb-1"
+  }, "New password (leave empty to keep current)"), /*#__PURE__*/React.createElement("input", {
+    type: "password",
+    value: newPassword,
+    onChange: e => {
+      setNewPassword(e.target.value);
+      setPwError('');
+    },
+    placeholder: "At least 6 characters",
+    className: "w-full px-3 py-2 bg-white border border-stone-200 rounded-md text-sm focus:outline-none focus:border-stone-500"
+  })), newPassword && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+    className: "block text-xs uppercase tracking-wider text-stone-600 mb-1"
+  }, "Confirm new password"), /*#__PURE__*/React.createElement("input", {
+    type: "password",
+    value: confirmPw,
+    onChange: e => {
+      setConfirmPw(e.target.value);
+      setPwError('');
+    },
+    className: "w-full px-3 py-2 bg-white border border-stone-200 rounded-md text-sm focus:outline-none focus:border-stone-500"
+  })), pwError && /*#__PURE__*/React.createElement("div", {
+    className: "text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded-md px-3 py-2 flex items-center gap-2"
+  }, /*#__PURE__*/React.createElement(AlertCircle, {
+    size: 14
+  }), " ", pwError), pwSuccess && /*#__PURE__*/React.createElement("div", {
+    className: "text-sm text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-md px-3 py-2 flex items-center gap-2"
+  }, /*#__PURE__*/React.createElement(Check, {
+    size: 14
+  }), " ", pwSuccess), /*#__PURE__*/React.createElement("button", {
+    onClick: saveChanges,
+    disabled: pwSaving,
+    className: "w-full py-2.5 bg-stone-900 text-amber-50 rounded-md text-sm font-medium hover:bg-stone-800 disabled:opacity-60"
+  }, pwSaving ? 'Saving…' : 'Save changes')));
 }
 function App() {
   const [customers, setCustomers] = useState([]);
