@@ -4,7 +4,24 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <meta name="theme-color" content="#1c1917">
-<title>Pal Mens Wear — Customer Book (Cloud)</title>
+<title>Pal Mens Wear — Customer Book</title>
+
+<!-- ============================================================ -->
+<!-- ⚙️ PAL MENS WEAR CONFIG ⚙️                                    -->
+<!-- ============================================================ -->
+<!-- Paste your Supabase URL and KEY between the quotes below.     -->
+<!-- Once set here, every device works without setup.              -->
+<!-- ============================================================ -->
+<script>
+  window.PMW_CONFIG = {
+    SUPABASE_URL: "https://iwjhudzsfbuhmcerzmmy.supabase.co",
+    SUPABASE_KEY: "PASTE_YOUR_LONG_eyJ_KEY_HERE"
+  };
+</script>
+<!-- ============================================================ -->
+<!-- (End of config — do not edit anything below this line)        -->
+<!-- ============================================================ -->
+
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2220%22 fill=%22%231c1917%22/><text x=%2250%22 y=%2270%22 font-size=%2270%22 font-family=%22Georgia%22 font-weight=%22600%22 text-anchor=%22middle%22 fill=%22%23fef3c7%22>P</text></svg>">
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
@@ -290,9 +307,11 @@ create policy "own data" on app_storage for all
 
 // ============================================================
 // Set up Supabase client + storage shim BEFORE rendering App
+// Priority: window.PMW_CONFIG (set in HTML head) first, then localStorage fallback
 // ============================================================
-const SUPABASE_URL = localStorage.getItem('_pmw_supabase_url');
-const SUPABASE_KEY = localStorage.getItem('_pmw_supabase_key');
+const _cfg = typeof window !== 'undefined' && window.PMW_CONFIG || {};
+const SUPABASE_URL = _cfg.SUPABASE_URL && _cfg.SUPABASE_URL.indexOf('PASTE_') === -1 ? _cfg.SUPABASE_URL : localStorage.getItem('_pmw_supabase_url');
+const SUPABASE_KEY = _cfg.SUPABASE_KEY && _cfg.SUPABASE_KEY.indexOf('PASTE_') === -1 ? _cfg.SUPABASE_KEY : localStorage.getItem('_pmw_supabase_key');
 let _supabase = null;
 if (SUPABASE_URL && SUPABASE_KEY) {
   _supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
