@@ -522,6 +522,17 @@ const daysUntilBackInQueue = call => {
 
 // ============ HELPERS ============
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+
+// Debounced value hook — for smooth search on large lists.
+// Returns `value` but only updates after the user stops changing it for `delay`ms.
+function useDebouncedValue(value, delay = 150) {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(t);
+  }, [value, delay]);
+  return debounced;
+}
 const formatINR = n => {
   if (n == null || isNaN(n)) return '₹0';
   const num = Math.round(Number(n));
@@ -642,6 +653,8 @@ function AccountSection({
       data
     }) => setEmail(data.user?.email || ''));
   }, []);
+  // Show just "admin" instead of "admin@palmens.local"
+  const displayName = email.endsWith('@palmens.local') ? email.slice(0, -14) : email;
   const changeConfig = () => {
     if (confirm('Change Supabase config? You will need to re-enter URL and key.')) {
       localStorage.removeItem('_pmw_supabase_url');
@@ -655,7 +668,7 @@ function AccountSection({
     className: "font-display text-lg text-stone-900 mb-1"
   }, "Account"), /*#__PURE__*/React.createElement("p", {
     className: "text-sm text-stone-600 mb-3"
-  }, "Logged in as ", /*#__PURE__*/React.createElement("strong", null, email || '...'), "."), /*#__PURE__*/React.createElement("div", {
+  }, "Logged in as ", /*#__PURE__*/React.createElement("strong", null, displayName || '...'), "."), /*#__PURE__*/React.createElement("div", {
     className: "flex flex-wrap gap-2"
   }, /*#__PURE__*/React.createElement("button", {
     onClick: onLogout,
@@ -687,6 +700,7 @@ function App() {
   // Excel import — lifted to App so the header button and Settings can both trigger it
   const fileImportRef = useRef(null);
   const [importPreview, setImportPreview] = useState(null);
+  const [importing, setImporting] = useState(false);
   const triggerImport = () => fileImportRef.current?.click();
 
   // ===== Load persisted data =====
@@ -744,10 +758,16 @@ function App() {
   };
 
   // ===== Save helpers =====
+  // Cache last-saved JSON per key, so we don't waste a network round-trip
+  // saving identical data (e.g. toggling a tag that was already set).
+  const lastSavedRef = useRef({});
   const saveCustomers = async list => {
     setCustomers(list);
     try {
-      await window.storage.set(STORAGE_KEYS.CUSTOMERS, JSON.stringify(list));
+      const json = JSON.stringify(list);
+      if (lastSavedRef.current[STORAGE_KEYS.CUSTOMERS] === json) return;
+      lastSavedRef.current[STORAGE_KEYS.CUSTOMERS] = json;
+      await window.storage.set(STORAGE_KEYS.CUSTOMERS, json);
     } catch (e) {
       showToast('Save failed', 'error');
     }
@@ -755,7 +775,10 @@ function App() {
   const savePurchases = async list => {
     setPurchases(list);
     try {
-      await window.storage.set(STORAGE_KEYS.PURCHASES, JSON.stringify(list));
+      const json = JSON.stringify(list);
+      if (lastSavedRef.current[STORAGE_KEYS.PURCHASES] === json) return;
+      lastSavedRef.current[STORAGE_KEYS.PURCHASES] = json;
+      await window.storage.set(STORAGE_KEYS.PURCHASES, json);
     } catch (e) {
       showToast('Save failed', 'error');
     }
@@ -763,7 +786,10 @@ function App() {
   const saveCalls = async list => {
     setCalls(list);
     try {
-      await window.storage.set(STORAGE_KEYS.CALLS, JSON.stringify(list));
+      const json = JSON.stringify(list);
+      if (lastSavedRef.current[STORAGE_KEYS.CALLS] === json) return;
+      lastSavedRef.current[STORAGE_KEYS.CALLS] = json;
+      await window.storage.set(STORAGE_KEYS.CALLS, json);
     } catch (e) {
       showToast('Save failed', 'error');
     }
@@ -875,16 +901,30 @@ function App() {
       showToast('Outcome required', 'error');
       return false;
     }
+
+    // Smart deduplication: if the same customer was just logged in the last 60 seconds,
+    // REPLACE that recent entry instead of adding a duplicate. Prevents accidental double-clicks
+    // (or network-slow clicks) from creating multiple entries.
+    const now = Date.now();
+    const RECENT_WINDOW_MS = 60 * 1000; // 60 seconds
+    const recentDuplicate = calls.find(k => k.customerId === data.customerId && now - (k.createdAt || 0) < RECENT_WINDOW_MS);
     const newCall = {
-      id: uid(),
+      id: recentDuplicate ? recentDuplicate.id : uid(),
       customerId: data.customerId,
       date: data.date || today(),
       outcome: data.outcome,
-      scheduledDate: data.scheduledDate || '',
-      notes: data.notes || '',
-      createdAt: Date.now()
+      scheduledDate: data.scheduledDate || recentDuplicate?.scheduledDate || '',
+      notes: data.notes || recentDuplicate?.notes || '',
+      createdAt: now
     };
-    await saveCalls([newCall, ...calls]);
+    if (recentDuplicate) {
+      // Replace the recent entry — same customer, recent click
+      const next = calls.map(k => k.id === recentDuplicate.id ? newCall : k);
+      await saveCalls(next);
+    } else {
+      // New entry
+      await saveCalls([newCall, ...calls]);
+    }
     const label = CALL_OUTCOMES.find(o => o.id === data.outcome)?.label || 'Call';
     showToast(`Logged: ${label}`);
     return true;
@@ -1054,47 +1094,54 @@ function App() {
   const handleImport = async payload => {
     const incomingCustomers = payload.newCustomers || [];
     const bills = payload.bills || [];
-    const byPhone = new Map(customers.map(c => [normalizePhone(c.phone), c]));
-    const customersToAdd = incomingCustomers.filter(c => !byPhone.has(normalizePhone(c.phone)));
-    customersToAdd.forEach(c => byPhone.set(normalizePhone(c.phone), c));
-    if (customersToAdd.length > 0) {
-      await saveCustomers([...customersToAdd, ...customers]);
-    }
-    const existingBillNos = new Set(purchases.map(p => p.billNo).filter(Boolean));
-    const newPurchases = [];
-    let skippedBills = 0;
-    bills.forEach(b => {
-      if (b.billNo && existingBillNos.has(b.billNo)) {
-        skippedBills++;
-        return;
+
+    // Show a clear "importing" indicator while we save (saves go to network)
+    setImporting(true);
+    try {
+      const byPhone = new Map(customers.map(c => [normalizePhone(c.phone), c]));
+      const customersToAdd = incomingCustomers.filter(c => !byPhone.has(normalizePhone(c.phone)));
+      customersToAdd.forEach(c => byPhone.set(normalizePhone(c.phone), c));
+      if (customersToAdd.length > 0) {
+        await saveCustomers([...customersToAdd, ...customers]);
       }
-      const cust = byPhone.get(normalizePhone(b.phone));
-      if (!cust) return;
-      const topCat = Object.entries(b.categories || {}).sort((a, z) => z[1] - a[1])[0];
-      const itemsList = (b.items || []).slice(0, 5).join(', ');
-      const extra = (b.items?.length || 0) > 5 ? `, +${b.items.length - 5} more` : '';
-      newPurchases.push({
-        id: uid(),
-        customerId: cust.id,
-        date: b.date || today(),
-        amount: Math.round(b.total * 100) / 100,
-        category: topCat?.[0] || 'Other',
-        paymentMode: 'Cash',
-        billNo: b.billNo || '',
-        notes: itemsList + extra,
-        createdAt: Date.now()
+      const existingBillNos = new Set(purchases.map(p => p.billNo).filter(Boolean));
+      const newPurchases = [];
+      let skippedBills = 0;
+      bills.forEach(b => {
+        if (b.billNo && existingBillNos.has(b.billNo)) {
+          skippedBills++;
+          return;
+        }
+        const cust = byPhone.get(normalizePhone(b.phone));
+        if (!cust) return;
+        const topCat = Object.entries(b.categories || {}).sort((a, z) => z[1] - a[1])[0];
+        const itemsList = (b.items || []).slice(0, 5).join(', ');
+        const extra = (b.items?.length || 0) > 5 ? `, +${b.items.length - 5} more` : '';
+        newPurchases.push({
+          id: uid(),
+          customerId: cust.id,
+          date: b.date || today(),
+          amount: Math.round(b.total * 100) / 100,
+          category: topCat?.[0] || 'Other',
+          paymentMode: 'Cash',
+          billNo: b.billNo || '',
+          notes: itemsList + extra,
+          createdAt: Date.now()
+        });
+        if (b.billNo) existingBillNos.add(b.billNo);
       });
-      if (b.billNo) existingBillNos.add(b.billNo);
-    });
-    if (newPurchases.length > 0) {
-      await savePurchases([...newPurchases, ...purchases]);
+      if (newPurchases.length > 0) {
+        await savePurchases([...newPurchases, ...purchases]);
+      }
+      const skippedC = incomingCustomers.length - customersToAdd.length;
+      const parts = [`${customersToAdd.length} customers`];
+      if (bills.length > 0) parts.push(`${newPurchases.length} sales`);
+      const dup = skippedC + skippedBills;
+      const msg = `Imported ${parts.join(', ')}` + (dup > 0 ? ` (skipped ${dup} duplicates)` : '');
+      showToast(msg);
+    } finally {
+      setImporting(false);
     }
-    const skippedC = incomingCustomers.length - customersToAdd.length;
-    const parts = [`${customersToAdd.length} customers`];
-    if (bills.length > 0) parts.push(`${newPurchases.length} sales`);
-    const dup = skippedC + skippedBills;
-    const msg = `Imported ${parts.join(', ')}` + (dup > 0 ? ` (skipped ${dup} duplicates)` : '');
-    showToast(msg);
   };
 
   // ===== Derived data per customer =====
@@ -1320,7 +1367,17 @@ function App() {
       setImportPreview(null);
     },
     onClose: () => setImportPreview(null)
-  }), toast && /*#__PURE__*/React.createElement("div", {
+  }), importing && /*#__PURE__*/React.createElement("div", {
+    className: "fixed inset-0 z-50 bg-stone-900/40 backdrop-blur-sm flex items-center justify-center"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "bg-white rounded-lg shadow-xl px-7 py-6 flex items-center gap-4 max-w-sm mx-4"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "h-10 w-10 rounded-full border-4 border-stone-200 border-t-stone-900 animate-spin"
+  }), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    className: "font-display text-lg text-stone-900"
+  }, "Importing\u2026"), /*#__PURE__*/React.createElement("div", {
+    className: "text-xs text-stone-500 mt-0.5"
+  }, "Saving to your database. Don't close this tab.")))), toast && /*#__PURE__*/React.createElement("div", {
     className: `fixed top-4 left-1/2 -translate-x-1/2 z-50 px-5 py-2.5 rounded-full text-sm font-medium shadow-lg ${toast.kind === 'error' ? 'bg-red-600 text-white' : 'bg-stone-900 text-amber-50'}`
   }, toast.msg));
 }
@@ -1368,14 +1425,17 @@ function LoginScreen({
     if (attempting) return;
     setAttempting(true);
     setError('');
+    // User can type just "admin" - we auto-append @palmens.local for Supabase
+    const raw = username.trim().toLowerCase();
+    const email = raw.includes('@') ? raw : raw + '@palmens.local';
     const {
       error: err
     } = await window._supabase.auth.signInWithPassword({
-      email: username.trim(),
+      email,
       password
     });
     if (err) {
-      setError(err.message || 'Wrong email or password');
+      setError('Wrong username or password');
       setAttempting(false);
     } else {
       onLogin();
@@ -1409,7 +1469,7 @@ function LoginScreen({
     className: "space-y-4"
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
     className: "block text-xs uppercase tracking-wider text-stone-600 mb-1"
-  }, "Email"), /*#__PURE__*/React.createElement("input", {
+  }, "Username"), /*#__PURE__*/React.createElement("input", {
     autoFocus: true,
     value: username,
     onChange: e => {
@@ -1417,8 +1477,7 @@ function LoginScreen({
       setError('');
     },
     onKeyDown: onKeyDown,
-    autoComplete: "email",
-    type: "email",
+    autoComplete: "username",
     className: "w-full px-3 py-2.5 bg-white border border-stone-200 rounded-md text-sm focus:outline-none focus:border-stone-500"
   })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
     className: "block text-xs uppercase tracking-wider text-stone-600 mb-1"
@@ -1778,12 +1837,13 @@ function CustomersList({
   const [tagFilter, setTagFilter] = useState('');
   const [sort, setSort] = useState('recent'); // recent | name | spent | visits
   const [visibleCount, setVisibleCount] = useState(50);
+  const qDebounced = useDebouncedValue(q, 150);
   useEffect(() => {
     setVisibleCount(50);
-  }, [q, tagFilter, sort]);
+  }, [qDebounced, tagFilter, sort]);
   const filtered = useMemo(() => {
-    const qn = q.trim().toLowerCase();
-    const qPhone = normalizePhone(q);
+    const qn = qDebounced.trim().toLowerCase();
+    const qPhone = normalizePhone(qDebounced);
     let list = customers.filter(c => {
       if (tagFilter && !(c.tags || []).includes(tagFilter)) return false;
       if (!qn) return true;
@@ -1791,7 +1851,7 @@ function CustomersList({
     });
     if (sort === 'name') list.sort((a, b) => a.name.localeCompare(b.name));else if (sort === 'spent') list.sort((a, b) => b.totalSpent - a.totalSpent);else if (sort === 'visits') list.sort((a, b) => b.visits - a.visits);else list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
     return list;
-  }, [customers, q, tagFilter, sort]);
+  }, [customers, qDebounced, tagFilter, sort]);
   return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     className: "flex items-end justify-between mb-4"
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
@@ -2126,18 +2186,20 @@ function AllPurchases({
   const [q, setQ] = useState('');
   const [catFilter, setCatFilter] = useState('');
   const [visibleCount, setVisibleCount] = useState(50);
+  const qDebounced = useDebouncedValue(q, 150);
   useEffect(() => {
     setVisibleCount(50);
-  }, [q, catFilter]);
+  }, [qDebounced, catFilter]);
   const sorted = useMemo(() => {
-    const qn = q.trim().toLowerCase();
+    const qn = qDebounced.trim().toLowerCase();
+    const qPhone = normalizePhone(qDebounced);
     return [...purchases].filter(p => {
       if (catFilter && p.category !== catFilter) return false;
       if (!qn) return true;
       const c = cMap[p.customerId];
-      return c && (c.name.toLowerCase().includes(qn) || normalizePhone(c.phone).includes(normalizePhone(q)));
+      return c && (c.name.toLowerCase().includes(qn) || qPhone && normalizePhone(c.phone).includes(qPhone));
     }).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-  }, [purchases, q, catFilter, cMap]);
+  }, [purchases, qDebounced, catFilter, cMap]);
   const total = sorted.reduce((s, p) => s + (Number(p.amount) || 0), 0);
   return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     className: "flex items-end justify-between mb-4"
@@ -2322,11 +2384,14 @@ function CallsView({
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
   const [visibleCount, setVisibleCount] = useState(50);
+  const searchDebounced = useDebouncedValue(search, 150);
+  // Track which (customer + outcome) is currently saving — prevents duplicate clicks
+  const [savingKey, setSavingKey] = useState(null);
 
   // Reset pagination when search/filter changes
   useEffect(() => {
     setVisibleCount(50);
-  }, [search, filter]);
+  }, [searchDebounced, filter]);
 
   // Build customer -> calls map (sorted, newest first)
   const callsByCustomer = useMemo(() => {
@@ -2374,8 +2439,8 @@ function CallsView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [calls, customers, callsByCustomer, todayYmd]);
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    const qPhone = normalizePhone(search);
+    const q = searchDebounced.trim().toLowerCase();
+    const qPhone = normalizePhone(searchDebounced);
     let list = customers.filter(c => {
       if (q) {
         const hit = c.name.toLowerCase().includes(q) || qPhone && normalizePhone(c.phone).includes(qPhone);
@@ -2391,13 +2456,21 @@ function CallsView({
     list.sort((a, b) => b.totalSpent - a.totalSpent);
     return list;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [customers, search, filter, callsByCustomer, todayYmd]);
+  }, [customers, searchDebounced, filter, callsByCustomer, todayYmd]);
   const quickLog = async (customerId, outcome) => {
-    await onAddCall({
-      customerId,
-      outcome,
-      date: todayYmd
-    });
+    const key = customerId + '|' + outcome;
+    // Prevent double-tap on the same button — if already saving this exact thing, ignore
+    if (savingKey === key) return;
+    setSavingKey(key);
+    try {
+      await onAddCall({
+        customerId,
+        outcome,
+        date: todayYmd
+      });
+    } finally {
+      setSavingKey(null);
+    }
   };
   const notCalledCount = customers.filter(c => !callsByCustomer[c.id]).length;
   const activeQueueCount = customers.filter(c => {
@@ -2546,21 +2619,30 @@ function CallsView({
       size: 13
     }), " Call"), /*#__PURE__*/React.createElement("button", {
       onClick: () => quickLog(c.id, 'visiting'),
-      className: "flex-1 py-2 text-xs font-medium rounded-md border bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border-emerald-200 flex items-center justify-center gap-1.5 transition"
-    }, /*#__PURE__*/React.createElement(Store, {
+      disabled: savingKey === c.id + '|visiting',
+      className: "flex-1 py-2 text-xs font-medium rounded-md border bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border-emerald-200 flex items-center justify-center gap-1.5 transition disabled:opacity-50 disabled:cursor-not-allowed"
+    }, savingKey === c.id + '|visiting' ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
+      className: "inline-block h-3 w-3 border-2 border-emerald-700 border-t-transparent rounded-full animate-spin"
+    }), " Saving") : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(Store, {
       size: 13
-    }), " Visit"), /*#__PURE__*/React.createElement("button", {
+    }), " Visit")), /*#__PURE__*/React.createElement("button", {
       onClick: () => quickLog(c.id, 'video_call'),
-      className: "flex-1 py-2 text-xs font-medium rounded-md border bg-sky-50 text-sky-800 hover:bg-sky-100 border-sky-200 flex items-center justify-center gap-1.5 transition"
-    }, /*#__PURE__*/React.createElement(Video, {
+      disabled: savingKey === c.id + '|video_call',
+      className: "flex-1 py-2 text-xs font-medium rounded-md border bg-sky-50 text-sky-800 hover:bg-sky-100 border-sky-200 flex items-center justify-center gap-1.5 transition disabled:opacity-50 disabled:cursor-not-allowed"
+    }, savingKey === c.id + '|video_call' ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
+      className: "inline-block h-3 w-3 border-2 border-sky-700 border-t-transparent rounded-full animate-spin"
+    }), " Saving") : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(Video, {
       size: 13
-    }), " Video"), /*#__PURE__*/React.createElement("button", {
+    }), " Video")), /*#__PURE__*/React.createElement("button", {
       onClick: () => quickLog(c.id, 'no_answer'),
-      className: "flex-1 py-2 text-xs font-medium rounded-md border bg-amber-50 text-amber-800 hover:bg-amber-100 border-amber-200 flex items-center justify-center gap-1.5 transition",
+      disabled: savingKey === c.id + '|no_answer',
+      className: "flex-1 py-2 text-xs font-medium rounded-md border bg-amber-50 text-amber-800 hover:bg-amber-100 border-amber-200 flex items-center justify-center gap-1.5 transition disabled:opacity-50 disabled:cursor-not-allowed",
       title: "No answer \u2014 retry in 3 days"
-    }, /*#__PURE__*/React.createElement(PhoneOff, {
+    }, savingKey === c.id + '|no_answer' ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
+      className: "inline-block h-3 w-3 border-2 border-amber-700 border-t-transparent rounded-full animate-spin"
+    }), " Saving") : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(PhoneOff, {
       size: 13
-    }), " No Ans"), /*#__PURE__*/React.createElement("button", {
+    }), " No Ans")), /*#__PURE__*/React.createElement("button", {
       onClick: () => onOpenCallForm(c),
       className: "px-2.5 py-2 text-xs font-medium rounded-md border bg-white text-stone-700 hover:bg-stone-50 border-stone-200 transition",
       title: "Add notes or scheduled date"
