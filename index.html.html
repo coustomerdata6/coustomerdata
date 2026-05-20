@@ -1,0 +1,3342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="theme-color" content="#1c1917">
+<title>Pal Mens Wear — Customer Book (Cloud)</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2220%22 fill=%22%231c1917%22/><text x=%2250%22 y=%2270%22 font-size=%2270%22 font-family=%22Georgia%22 font-weight=%22600%22 text-anchor=%22middle%22 fill=%22%23fef3c7%22>P</text></svg>">
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  html, body { background: #fafaf9; margin: 0; }
+  #root { min-height: 100vh; }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@18.3.1",
+    "react-dom/client": "https://esm.sh/react-dom@18.3.1/client?deps=react@18.3.1",
+    "lucide-react": "https://esm.sh/lucide-react@0.383.0?external=react&deps=react@18.3.1",
+    "xlsx": "https://esm.sh/xlsx@0.18.5"
+  }
+}
+</script>
+</head>
+<body>
+<div id="root">
+  <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:Georgia,serif;color:#1c1917;text-align:center;padding:20px;">
+    <div>
+      <div style="font-size:32px;font-weight:600;">Pal Mens Wear</div>
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:5px;color:#78716c;margin-top:4px;">Customer Book</div>
+      <div style="margin-top:24px;font-size:14px;color:#78716c;">Loading…</div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import React from 'react';
+function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { createRoot } from 'react-dom/client';
+import { Users, ShoppingBag, Trophy, LayoutDashboard, Settings as SettingsIcon, Plus, Search, X, Phone, Calendar, Edit2, Trash2, TrendingUp, MessageCircle, Download, Upload, Cake, Heart, Tag as TagIcon, ChevronRight, AlertCircle, Star, ArrowLeft, Check, MoreVertical, Award, Activity, IndianRupee, FileText, Sparkles, Zap, Store, Video, PhoneOff, PhoneCall, Clock, Eye, EyeOff, LogOut, Lock } from 'lucide-react';
+import * as XLSX from 'xlsx';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
+
+// ============================================================
+// Config screen for first-time setup
+// ============================================================
+function ConfigScreen({
+  onSaved
+}) {
+  const [url, setUrl] = useState('');
+  const [key, setKey] = useState('');
+  const [showHelp, setShowHelp] = useState(false);
+  const [err, setErr] = useState('');
+  const save = () => {
+    const cleanUrl = url.trim().replace(/\/$/, '');
+    const cleanKey = key.trim();
+    if (!cleanUrl.startsWith('https://') || !cleanUrl.includes('.supabase.co')) {
+      setErr('URL should look like https://something.supabase.co');
+      return;
+    }
+    if (cleanKey.length < 50) {
+      setErr('Anon key looks too short. Make sure you copied the entire long string.');
+      return;
+    }
+    localStorage.setItem('_pmw_supabase_url', cleanUrl);
+    localStorage.setItem('_pmw_supabase_key', cleanKey);
+    location.reload();
+  };
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      minHeight: '100vh',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: '16px',
+      background: '#fafaf9',
+      fontFamily: 'system-ui,sans-serif'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      maxWidth: '500px',
+      width: '100%'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: 'center',
+      marginBottom: '28px'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: '56px',
+      height: '56px',
+      margin: '0 auto 12px',
+      borderRadius: '8px',
+      background: '#1c1917',
+      color: '#fef3c7',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      fontSize: '28px',
+      fontFamily: 'Georgia,serif',
+      fontWeight: 600
+    }
+  }, "P"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: 'Georgia,serif',
+      fontSize: '30px',
+      color: '#1c1917',
+      fontWeight: 600
+    }
+  }, "Pal Mens Wear"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: '10px',
+      textTransform: 'uppercase',
+      letterSpacing: '5px',
+      color: '#78716c',
+      marginTop: '4px'
+    }
+  }, "Customer Book")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: '#fff',
+      border: '1px solid #e7e5e4',
+      borderRadius: '10px',
+      padding: '24px'
+    }
+  }, /*#__PURE__*/React.createElement("h2", {
+    style: {
+      fontFamily: 'Georgia,serif',
+      fontSize: '22px',
+      color: '#1c1917',
+      margin: '0 0 8px',
+      fontWeight: 600
+    }
+  }, "One-time setup"), /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: '14px',
+      color: '#57534e',
+      margin: '0 0 20px'
+    }
+  }, "Paste your Supabase URL and key below. You only do this once per device."), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: '14px'
+    }
+  }, /*#__PURE__*/React.createElement("label", {
+    style: {
+      display: 'block',
+      fontSize: '11px',
+      textTransform: 'uppercase',
+      letterSpacing: '1px',
+      color: '#57534e',
+      marginBottom: '4px'
+    }
+  }, "Supabase URL"), /*#__PURE__*/React.createElement("input", {
+    value: url,
+    onChange: e => {
+      setUrl(e.target.value);
+      setErr('');
+    },
+    placeholder: "https://xxxxxxxx.supabase.co",
+    style: {
+      width: '100%',
+      padding: '10px 12px',
+      fontSize: '14px',
+      border: '1px solid #e7e5e4',
+      borderRadius: '6px',
+      boxSizing: 'border-box'
+    }
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: '14px'
+    }
+  }, /*#__PURE__*/React.createElement("label", {
+    style: {
+      display: 'block',
+      fontSize: '11px',
+      textTransform: 'uppercase',
+      letterSpacing: '1px',
+      color: '#57534e',
+      marginBottom: '4px'
+    }
+  }, "Anon (public) key"), /*#__PURE__*/React.createElement("textarea", {
+    value: key,
+    onChange: e => {
+      setKey(e.target.value);
+      setErr('');
+    },
+    placeholder: "eyJhbGc...",
+    rows: 3,
+    style: {
+      width: '100%',
+      padding: '10px 12px',
+      fontSize: '12px',
+      border: '1px solid #e7e5e4',
+      borderRadius: '6px',
+      boxSizing: 'border-box',
+      fontFamily: 'monospace',
+      resize: 'vertical'
+    }
+  })), err && /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: '#fef2f2',
+      border: '1px solid #fecaca',
+      color: '#b91c1c',
+      padding: '8px 12px',
+      borderRadius: '6px',
+      fontSize: '13px',
+      marginBottom: '14px'
+    }
+  }, err), /*#__PURE__*/React.createElement("button", {
+    onClick: save,
+    style: {
+      width: '100%',
+      padding: '11px',
+      background: '#1c1917',
+      color: '#fef3c7',
+      border: 'none',
+      borderRadius: '6px',
+      fontSize: '14px',
+      fontWeight: 500,
+      cursor: 'pointer'
+    }
+  }, "Save and continue \u2192"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setShowHelp(s => !s),
+    style: {
+      width: '100%',
+      marginTop: '12px',
+      padding: '8px',
+      background: 'transparent',
+      color: '#78716c',
+      border: 'none',
+      fontSize: '13px',
+      cursor: 'pointer',
+      textDecoration: 'underline'
+    }
+  }, showHelp ? 'Hide setup instructions' : "Don't have these? Show me how →"), showHelp && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: '16px',
+      padding: '16px',
+      background: '#fafaf9',
+      border: '1px solid #e7e5e4',
+      borderRadius: '6px',
+      fontSize: '13px',
+      color: '#44403c',
+      lineHeight: 1.6
+    }
+  }, /*#__PURE__*/React.createElement("strong", null, "One-time Supabase setup (10 minutes, all in browser):"), /*#__PURE__*/React.createElement("ol", {
+    style: {
+      paddingLeft: '20px',
+      marginTop: '10px'
+    }
+  }, /*#__PURE__*/React.createElement("li", null, "Go to ", /*#__PURE__*/React.createElement("a", {
+    href: "https://supabase.com",
+    target: "_blank",
+    style: {
+      color: '#1c1917'
+    }
+  }, "supabase.com"), " and sign up (use Google login \u2014 fastest)"), /*#__PURE__*/React.createElement("li", null, "Click ", /*#__PURE__*/React.createElement("strong", null, "New project"), ". Name it ", /*#__PURE__*/React.createElement("code", null, "palmenswear"), ", pick a region near you (Singapore or Mumbai), set a password (save it). Click Create. Wait ~2 min."), /*#__PURE__*/React.createElement("li", null, "In the left sidebar click ", /*#__PURE__*/React.createElement("strong", null, "SQL Editor"), " \u2192 ", /*#__PURE__*/React.createElement("strong", null, "New query")), /*#__PURE__*/React.createElement("li", null, "Copy and paste this exact SQL, then click Run:", /*#__PURE__*/React.createElement("pre", {
+    style: {
+      background: '#1c1917',
+      color: '#fef3c7',
+      padding: '10px',
+      borderRadius: '4px',
+      fontSize: '11px',
+      overflow: 'auto',
+      marginTop: '6px',
+      whiteSpace: 'pre-wrap'
+    }
+  }, `create table if not exists app_storage (
+  user_id uuid references auth.users(id) on delete cascade not null,
+  key text not null,
+  value text not null,
+  primary key (user_id, key)
+);
+alter table app_storage enable row level security;
+create policy "own data" on app_storage for all
+  using (auth.uid() = user_id) with check (auth.uid() = user_id);`)), /*#__PURE__*/React.createElement("li", null, "Left sidebar \u2192 ", /*#__PURE__*/React.createElement("strong", null, "Authentication"), " \u2192 ", /*#__PURE__*/React.createElement("strong", null, "Users"), " \u2192 ", /*#__PURE__*/React.createElement("strong", null, "Add user \u2192 Create new user"), ". Enter your email, a strong password, ", /*#__PURE__*/React.createElement("strong", null, "tick \"Auto Confirm User\""), ". Click Create."), /*#__PURE__*/React.createElement("li", null, "Bottom-left gear icon (", /*#__PURE__*/React.createElement("strong", null, "Project Settings"), ") \u2192 ", /*#__PURE__*/React.createElement("strong", null, "API"), ". You'll see two values:", /*#__PURE__*/React.createElement("ul", {
+    style: {
+      marginTop: '4px'
+    }
+  }, /*#__PURE__*/React.createElement("li", null, /*#__PURE__*/React.createElement("strong", null, "Project URL"), " \u2014 paste into \"Supabase URL\" above"), /*#__PURE__*/React.createElement("li", null, /*#__PURE__*/React.createElement("strong", null, "anon public"), " key \u2014 paste into \"Anon key\" above"))), /*#__PURE__*/React.createElement("li", null, "Click \"Save and continue\" above. Then login with the email + password from step 5.")))), /*#__PURE__*/React.createElement("p", {
+    style: {
+      textAlign: 'center',
+      fontSize: '11px',
+      color: '#a8a29e',
+      marginTop: '18px'
+    }
+  }, "Your data lives in YOUR Supabase project. Pal Mens Wear staff only.")));
+}
+
+// ============================================================
+// Set up Supabase client + storage shim BEFORE rendering App
+// ============================================================
+const SUPABASE_URL = localStorage.getItem('_pmw_supabase_url');
+const SUPABASE_KEY = localStorage.getItem('_pmw_supabase_key');
+let _supabase = null;
+if (SUPABASE_URL && SUPABASE_KEY) {
+  _supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+  window._supabase = _supabase;
+}
+
+// window.storage shim — backed by Supabase app_storage table
+window.storage = {
+  async get(key) {
+    if (!_supabase) return null;
+    const {
+      data: {
+        user
+      }
+    } = await _supabase.auth.getUser();
+    if (!user) return null;
+    const {
+      data
+    } = await _supabase.from('app_storage').select('value').eq('user_id', user.id).eq('key', key).maybeSingle();
+    return data ? {
+      value: data.value
+    } : null;
+  },
+  async set(key, value) {
+    if (!_supabase) throw new Error('Not configured');
+    const {
+      data: {
+        user
+      }
+    } = await _supabase.auth.getUser();
+    if (!user) throw new Error('Not signed in');
+    const {
+      error
+    } = await _supabase.from('app_storage').upsert({
+      user_id: user.id,
+      key,
+      value
+    }, {
+      onConflict: 'user_id,key'
+    });
+    if (error) throw error;
+    return {
+      value
+    };
+  },
+  async delete(key) {
+    if (!_supabase) return {
+      deleted: false
+    };
+    const {
+      data: {
+        user
+      }
+    } = await _supabase.auth.getUser();
+    if (!user) return {
+      deleted: false
+    };
+    await _supabase.from('app_storage').delete().eq('user_id', user.id).eq('key', key);
+    return {
+      deleted: true
+    };
+  },
+  async list(prefix) {
+    if (!_supabase) return {
+      keys: []
+    };
+    const {
+      data: {
+        user
+      }
+    } = await _supabase.auth.getUser();
+    if (!user) return {
+      keys: []
+    };
+    let q = _supabase.from('app_storage').select('key').eq('user_id', user.id);
+    if (prefix) q = q.like('key', prefix + '%');
+    const {
+      data
+    } = await q;
+    return {
+      keys: (data || []).map(r => r.key)
+    };
+  }
+};
+
+// ============ CONSTANTS ============
+const STORAGE_KEYS = {
+  CUSTOMERS: 'customers',
+  PURCHASES: 'purchases',
+  CALLS: 'calls',
+  AUTH: 'auth_session'
+};
+const AUTH = {
+  username: 'admin',
+  password: 'jaimatadi1'
+};
+const CATEGORIES = ['Shirt', 'Pant', 'Suit', 'Sherwani', 'Kurta', 'T-Shirt', 'Jeans', 'Blazer', 'Indo-Western', 'Accessories', 'Other'];
+const PAYMENT_MODES = ['Cash', 'UPI', 'Card', 'Other'];
+const AVAILABLE_TAGS = ['VIP', 'Wedding', 'Family', 'New', 'Regular', 'Wholesale'];
+const TAG_COLORS = {
+  VIP: 'bg-amber-100 text-amber-900 border-amber-300',
+  Wedding: 'bg-rose-100 text-rose-900 border-rose-300',
+  Family: 'bg-emerald-100 text-emerald-900 border-emerald-300',
+  New: 'bg-sky-100 text-sky-900 border-sky-300',
+  Regular: 'bg-slate-100 text-slate-800 border-slate-300',
+  Wholesale: 'bg-violet-100 text-violet-900 border-violet-300'
+};
+const DORMANT_DAYS = 180;
+
+// Call outcomes — simple lead workflow
+const CALL_OUTCOMES = [{
+  id: 'visiting',
+  label: 'Will Visit',
+  shortLabel: 'Visit',
+  icon: Store
+}, {
+  id: 'video_call',
+  label: 'Video Call',
+  shortLabel: 'Video',
+  icon: Video
+}, {
+  id: 'no_answer',
+  label: 'No Answer',
+  shortLabel: 'No Ans',
+  icon: PhoneOff
+}];
+const OUTCOME_BADGE = {
+  visiting: 'bg-emerald-100 text-emerald-900 border border-emerald-300',
+  video_call: 'bg-sky-100 text-sky-900 border border-sky-300',
+  no_answer: 'bg-amber-100 text-amber-900 border border-amber-300'
+};
+const OUTCOME_BTN = {
+  visiting: 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border-emerald-200',
+  video_call: 'bg-sky-50 text-sky-800 hover:bg-sky-100 border-sky-200',
+  no_answer: 'bg-amber-50 text-amber-800 hover:bg-amber-100 border-amber-200'
+};
+
+// Get display info for a call. Handles video_call sub-states (pending / sold / failed).
+const getCallDisplay = call => {
+  if (!call) return null;
+  const def = CALL_OUTCOMES.find(o => o.id === call.outcome);
+  if (!def) {
+    // Legacy / unknown outcome — show generic
+    return {
+      label: 'Call logged',
+      badge: 'bg-stone-100 text-stone-700 border border-stone-300',
+      icon: Phone
+    };
+  }
+  if (call.outcome === 'video_call') {
+    if (call.videoStatus === 'selected') {
+      return {
+        label: 'Sold via video ✓',
+        badge: 'bg-emerald-100 text-emerald-900 border border-emerald-300',
+        icon: def.icon
+      };
+    }
+    if (call.videoStatus === 'not_selected') {
+      return {
+        label: 'Video failed ✗',
+        badge: 'bg-rose-100 text-rose-800 border border-rose-200',
+        icon: def.icon
+      };
+    }
+    return {
+      label: 'Video pending',
+      badge: 'bg-amber-100 text-amber-900 border border-amber-300',
+      icon: def.icon
+    };
+  }
+  return {
+    label: def.label,
+    badge: OUTCOME_BADGE[def.id],
+    icon: def.icon
+  };
+};
+
+// Cooldown — after a call with this outcome, customer is hidden from "All" for these days
+const COOLDOWN_DAYS = {
+  visiting: 21,
+  video_pending: 10,
+  video_selected: 60,
+  // Sold — treat like a regular post-sale customer
+  video_not_selected: 30,
+  // Video failed — retry after a month
+  no_answer: 3 // Quick retry if they didn't pick up
+};
+const callCooldownDays = call => {
+  if (!call) return 0;
+  if (call.outcome === 'video_call') {
+    if (call.videoStatus === 'selected') return COOLDOWN_DAYS.video_selected;
+    if (call.videoStatus === 'not_selected') return COOLDOWN_DAYS.video_not_selected;
+    return COOLDOWN_DAYS.video_pending;
+  }
+  return COOLDOWN_DAYS[call.outcome] || 0;
+};
+
+// When user provided a scheduledDate (e.g. "coming Saturday"), prefer day-after-scheduled.
+// IMPORTANT: only honor scheduledDate while the call is STILL pending — once a video call is
+// marked done (sold/no-sale), use the post-completion cooldown days instead.
+const cooldownEndDate = call => {
+  if (!call) return null;
+  const isPendingVisitOrVideo = call.outcome === 'visiting' || call.outcome === 'video_call' && !call.videoStatus;
+  if (call.scheduledDate && isPendingVisitOrVideo) {
+    const sd = parseLocalYMD(call.scheduledDate);
+    if (sd) {
+      sd.setDate(sd.getDate() + 1);
+      return sd;
+    }
+  }
+  const days = callCooldownDays(call);
+  if (days === 0) return null;
+  const base = parseLocalYMD(call.date || new Date().toISOString().slice(0, 10));
+  if (!base) return null;
+  base.setDate(base.getDate() + days);
+  return base;
+};
+const isInCooldown = call => {
+  const end = cooldownEndDate(call);
+  return end ? Date.now() < end.getTime() : false;
+};
+const daysUntilBackInQueue = call => {
+  const end = cooldownEndDate(call);
+  if (!end) return 0;
+  return Math.max(0, Math.ceil((end.getTime() - Date.now()) / 86400000));
+};
+
+// ============ HELPERS ============
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+const formatINR = n => {
+  if (n == null || isNaN(n)) return '₹0';
+  const num = Math.round(Number(n));
+  const sign = num < 0 ? '-' : '';
+  const abs = Math.abs(num).toString();
+  const lastThree = abs.slice(-3);
+  const rest = abs.slice(0, -3);
+  const formatted = rest ? rest.replace(/(\d)(?=(\d{2})+(?!\d))/g, '$1,') + ',' + lastThree : lastThree;
+  return sign + '₹' + formatted;
+};
+const today = () => new Date().toISOString().slice(0, 10);
+const daysSince = dateStr => {
+  if (!dateStr) return null;
+  const s = String(dateStr).slice(0, 10);
+  const parts = s.split('-');
+  if (parts.length !== 3) return null;
+  const dt = new Date(+parts[0], +parts[1] - 1, +parts[2]);
+  if (isNaN(dt.getTime())) return null;
+  const now = new Date();
+  // Compare midnight-to-midnight to avoid off-by-one near time-of-day
+  now.setHours(0, 0, 0, 0);
+  dt.setHours(0, 0, 0, 0);
+  return Math.floor((now.getTime() - dt.getTime()) / 86400000);
+};
+
+// Parse YYYY-MM-DD as a local Date (avoids UTC interpretation bugs)
+const parseLocalYMD = s => {
+  if (!s) return null;
+  const parts = String(s).slice(0, 10).split('-');
+  if (parts.length !== 3) return null;
+  const d = new Date(+parts[0], +parts[1] - 1, +parts[2]);
+  return isNaN(d.getTime()) ? null : d;
+};
+
+// Phone link helper — adds India country code for 10-digit mobile numbers
+const phoneForLink = phone => {
+  const d = String(phone || '').replace(/\D/g, '');
+  if (d.length === 10 && /^[6-9]/.test(d)) return '91' + d;
+  return d;
+};
+const shortAgo = dateStr => {
+  const d = daysSince(dateStr);
+  if (d === null) return '';
+  if (d === 0) return 'today';
+  if (d === 1) return 'yesterday';
+  if (d < 7) return `${d}d ago`;
+  if (d < 30) return `${Math.floor(d / 7)}w ago`;
+  if (d < 365) return `${Math.floor(d / 30)}mo ago`;
+  return `${Math.floor(d / 365)}y ago`;
+};
+const formatDate = s => {
+  if (!s) return '—';
+  const d = new Date(s);
+  return d.toLocaleDateString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric'
+  });
+};
+const monthName = m => ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][m];
+const normalizePhone = p => (p || '').replace(/\D/g, '');
+const initials = name => {
+  const parts = (name || '').trim().split(/\s+/);
+  return ((parts[0]?.[0] || '') + (parts[1]?.[0] || '')).toUpperCase() || '?';
+};
+
+// Parse dates in many formats: Date object, DD/MM/YYYY, DD-MM-YYYY, YYYY-MM-DD
+const parseAnyDate = val => {
+  if (val == null || val === '') return '';
+  if (val instanceof Date) {
+    if (isNaN(val.getTime())) return '';
+    return val.toISOString().slice(0, 10);
+  }
+  const s = String(val).trim();
+  if (!s) return '';
+  // DD/MM/YYYY or DD-MM-YYYY (Indian format)
+  let m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/);
+  if (m) {
+    let [, d, mo, y] = m;
+    if (y.length === 2) y = (parseInt(y, 10) > 50 ? '19' : '20') + y;
+    const dd = d.padStart(2, '0'),
+      mm = mo.padStart(2, '0');
+    if (parseInt(mm, 10) >= 1 && parseInt(mm, 10) <= 12 && parseInt(dd, 10) >= 1 && parseInt(dd, 10) <= 31) {
+      return `${y}-${mm}-${dd}`;
+    }
+  }
+  // YYYY-MM-DD already
+  m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  return '';
+};
+
+// Infer menswear category from item name + brand
+const inferCategory = (itemName, brand) => {
+  const s = ((itemName || '') + ' ' + (brand || '')).toUpperCase();
+  if (s.includes('T-SHIRT') || s.includes('TSHIRT') || s.includes('T SHIRT')) return 'T-Shirt';
+  if (s.includes('SHIRT')) return 'Shirt';
+  if (s.includes('SHERWANI')) return 'Sherwani';
+  if (s.includes('SUIT')) return 'Suit';
+  if (s.includes('BLAZER') || s.includes('COAT')) return 'Blazer';
+  if (s.includes('JEAN') || s.includes('DENIM')) return 'Jeans';
+  if (s.includes('TROUSER') || s.includes('CARGO') || s.includes('PANT') || s.includes('CHINO')) return 'Pant';
+  if (s.includes('KURTA') || s.includes('PAJAMA') || s.includes('PYJAMA') || s.includes('PAYJAMA')) return 'Kurta';
+  if (s.includes('CO-ORD') || s.includes('COORD') || s.includes('INDO')) return 'Indo-Western';
+  if (s.includes('BARMUDA') || s.includes('BERMUDA') || s.includes('SHORT')) return 'Other';
+  if (s.includes('BELT') || s.includes('TIE') || s.includes('SOCK') || s.includes('CAP') || s.includes('WALLET')) return 'Accessories';
+  return 'Other';
+};
+
+// ============ ROOT ============
+
+function AccountSection({
+  onLogout
+}) {
+  const [email, setEmail] = useState('');
+  useEffect(() => {
+    window._supabase.auth.getUser().then(({
+      data
+    }) => setEmail(data.user?.email || ''));
+  }, []);
+  const changeConfig = () => {
+    if (confirm('Change Supabase config? You will need to re-enter URL and key.')) {
+      localStorage.removeItem('_pmw_supabase_url');
+      localStorage.removeItem('_pmw_supabase_key');
+      location.reload();
+    }
+  };
+  return /*#__PURE__*/React.createElement("section", {
+    className: "bg-white border border-stone-200 rounded-lg p-5 mb-4"
+  }, /*#__PURE__*/React.createElement("h3", {
+    className: "font-display text-lg text-stone-900 mb-1"
+  }, "Account"), /*#__PURE__*/React.createElement("p", {
+    className: "text-sm text-stone-600 mb-3"
+  }, "Logged in as ", /*#__PURE__*/React.createElement("strong", null, email || '...'), "."), /*#__PURE__*/React.createElement("div", {
+    className: "flex flex-wrap gap-2"
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: onLogout,
+    className: "px-4 py-2 bg-stone-50 border border-stone-200 rounded-md text-sm font-medium hover:bg-stone-100 inline-flex items-center gap-2"
+  }, /*#__PURE__*/React.createElement(LogOut, {
+    size: 14
+  }), " Logout"), /*#__PURE__*/React.createElement("button", {
+    onClick: changeConfig,
+    className: "px-4 py-2 bg-white border border-stone-200 rounded-md text-sm font-medium hover:bg-stone-50 text-stone-500"
+  }, "Change database config")));
+}
+function App() {
+  const [customers, setCustomers] = useState([]);
+  const [purchases, setPurchases] = useState([]);
+  const [calls, setCalls] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [isAuthed, setIsAuthed] = useState(false);
+  const [view, setView] = useState('dashboard');
+  const [selectedCustomerId, setSelectedCustomerId] = useState(null);
+  const [toast, setToast] = useState(null);
+
+  // Modal states
+  const [customerModal, setCustomerModal] = useState(null); // null | { mode: 'add'|'edit', customer? }
+  const [purchaseModal, setPurchaseModal] = useState(null); // null | { customer? }
+  const [quickAddModal, setQuickAddModal] = useState(false);
+  const [confirmModal, setConfirmModal] = useState(null); // { title, message, onConfirm }
+  const [callModal, setCallModal] = useState(null); // null | { customer }
+
+  // Excel import — lifted to App so the header button and Settings can both trigger it
+  const fileImportRef = useRef(null);
+  const [importPreview, setImportPreview] = useState(null);
+  const triggerImport = () => fileImportRef.current?.click();
+
+  // ===== Load persisted data =====
+  useEffect(() => {
+    (async () => {
+      const {
+        data: {
+          session
+        }
+      } = await window._supabase.auth.getSession();
+      if (!session) {
+        setIsAuthed(false);
+        setLoading(false);
+        return;
+      }
+      setIsAuthed(true);
+      try {
+        const c = await window.storage.get(STORAGE_KEYS.CUSTOMERS);
+        if (c?.value) setCustomers(JSON.parse(c.value));
+      } catch (e) {}
+      try {
+        const p = await window.storage.get(STORAGE_KEYS.PURCHASES);
+        if (p?.value) setPurchases(JSON.parse(p.value));
+      } catch (e) {}
+      try {
+        const k = await window.storage.get(STORAGE_KEYS.CALLS);
+        if (k?.value) setCalls(JSON.parse(k.value));
+      } catch (e) {}
+      setLoading(false);
+    })();
+    const {
+      data: {
+        subscription
+      }
+    } = window._supabase.auth.onAuthStateChange((_e, session) => {
+      setIsAuthed(!!session);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+  const handleLogin = async () => {
+    setIsAuthed(true);
+  };
+  const handleLogout = async () => {
+    await window._supabase.auth.signOut();
+    setIsAuthed(false);
+  };
+
+  // ===== Toast =====
+  const showToast = (msg, kind = 'success') => {
+    setToast({
+      msg,
+      kind
+    });
+    setTimeout(() => setToast(null), 2500);
+  };
+
+  // ===== Save helpers =====
+  const saveCustomers = async list => {
+    setCustomers(list);
+    try {
+      await window.storage.set(STORAGE_KEYS.CUSTOMERS, JSON.stringify(list));
+    } catch (e) {
+      showToast('Save failed', 'error');
+    }
+  };
+  const savePurchases = async list => {
+    setPurchases(list);
+    try {
+      await window.storage.set(STORAGE_KEYS.PURCHASES, JSON.stringify(list));
+    } catch (e) {
+      showToast('Save failed', 'error');
+    }
+  };
+  const saveCalls = async list => {
+    setCalls(list);
+    try {
+      await window.storage.set(STORAGE_KEYS.CALLS, JSON.stringify(list));
+    } catch (e) {
+      showToast('Save failed', 'error');
+    }
+  };
+
+  // ===== Customer actions =====
+  const upsertCustomer = async data => {
+    const phone = normalizePhone(data.phone);
+    if (!data.name?.trim()) {
+      showToast('Name is required', 'error');
+      return null;
+    }
+    if (!phone || phone.length < 7) {
+      showToast('Valid phone required', 'error');
+      return null;
+    }
+
+    // Check duplicate phone (except when editing same)
+    const dup = customers.find(c => normalizePhone(c.phone) === phone && c.id !== data.id);
+    if (dup) {
+      showToast(`Phone already exists: ${dup.name}`, 'error');
+      return null;
+    }
+    if (data.id) {
+      const next = customers.map(c => c.id === data.id ? {
+        ...c,
+        ...data,
+        phone
+      } : c);
+      await saveCustomers(next);
+      showToast('Customer updated');
+      return data.id;
+    } else {
+      const newC = {
+        id: uid(),
+        name: data.name.trim(),
+        phone,
+        birthday: data.birthday || '',
+        anniversary: data.anniversary || '',
+        tags: data.tags || [],
+        notes: data.notes || '',
+        createdAt: Date.now()
+      };
+      await saveCustomers([newC, ...customers]);
+      showToast('Customer added');
+      return newC.id;
+    }
+  };
+  const deleteCustomer = async id => {
+    const c = customers.find(x => x.id === id);
+    setConfirmModal({
+      title: 'Delete customer?',
+      message: `This will delete ${c?.name} and all their ${purchases.filter(p => p.customerId === id).length} purchase records. Cannot be undone.`,
+      onConfirm: async () => {
+        await saveCustomers(customers.filter(c => c.id !== id));
+        await savePurchases(purchases.filter(p => p.customerId !== id));
+        await saveCalls(calls.filter(k => k.customerId !== id));
+        setSelectedCustomerId(null);
+        if (view === 'customer-detail') setView('customers');
+        showToast('Customer deleted');
+      }
+    });
+  };
+
+  // ===== Purchase actions =====
+  const addPurchase = async data => {
+    const amount = Number(data.amount);
+    if (!data.customerId) {
+      showToast('Customer required', 'error');
+      return false;
+    }
+    if (!amount || amount <= 0) {
+      showToast('Valid amount required', 'error');
+      return false;
+    }
+    const newP = {
+      id: uid(),
+      customerId: data.customerId,
+      date: data.date || today(),
+      amount,
+      category: data.category || 'Other',
+      paymentMode: data.paymentMode || 'Cash',
+      billNo: data.billNo || '',
+      notes: data.notes || '',
+      createdAt: Date.now()
+    };
+    await savePurchases([newP, ...purchases]);
+    showToast('Purchase added');
+    return true;
+  };
+  const deletePurchase = async id => {
+    setConfirmModal({
+      title: 'Delete purchase?',
+      message: 'This purchase record will be permanently removed.',
+      onConfirm: async () => {
+        await savePurchases(purchases.filter(p => p.id !== id));
+        showToast('Purchase deleted');
+      }
+    });
+  };
+
+  // ===== Call actions =====
+  const addCall = async data => {
+    if (!data.customerId) {
+      showToast('Customer required', 'error');
+      return false;
+    }
+    if (!data.outcome) {
+      showToast('Outcome required', 'error');
+      return false;
+    }
+    const newCall = {
+      id: uid(),
+      customerId: data.customerId,
+      date: data.date || today(),
+      outcome: data.outcome,
+      scheduledDate: data.scheduledDate || '',
+      notes: data.notes || '',
+      createdAt: Date.now()
+    };
+    await saveCalls([newCall, ...calls]);
+    const label = CALL_OUTCOMES.find(o => o.id === data.outcome)?.label || 'Call';
+    showToast(`Logged: ${label}`);
+    return true;
+  };
+  const deleteCall = async id => {
+    setConfirmModal({
+      title: 'Delete call?',
+      message: 'This call record will be removed.',
+      onConfirm: async () => {
+        await saveCalls(calls.filter(k => k.id !== id));
+        showToast('Call deleted');
+      }
+    });
+  };
+  const updateCall = async (id, updates) => {
+    const next = calls.map(k => k.id === id ? {
+      ...k,
+      ...updates
+    } : k);
+    await saveCalls(next);
+    if (updates.videoStatus === 'selected') showToast('Marked: Sold ✓');else if (updates.videoStatus === 'not_selected') showToast('Marked: Video failed');else showToast('Call updated');
+  };
+
+  // ===== Excel import =====
+  const handleFile = async e => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, {
+        cellDates: true
+      });
+      if (!workbook.SheetNames.length) {
+        alert('No sheet found in file');
+        return;
+      }
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, {
+        header: 1,
+        defval: ''
+      });
+      if (rows.length < 2) {
+        alert('File appears empty');
+        return;
+      }
+      const cell = v => {
+        if (v == null) return '';
+        if (v instanceof Date) {
+          if (isNaN(v.getTime())) return '';
+          return v.toISOString().slice(0, 10);
+        }
+        return String(v).trim();
+      };
+      const num = v => {
+        if (v == null || v === '') return 0;
+        if (typeof v === 'number') return v;
+        return parseFloat(String(v).replace(/[^0-9.\-]/g, '')) || 0;
+      };
+      const header = rows[0].map(h => cell(h).toLowerCase());
+      const hasBillNo = header.some(h => h.includes('bill') && (h.includes('no') || h.includes('number')));
+      const hasItem = header.some(h => h.includes('item'));
+      const hasNetSale = header.some(h => h.includes('net sale') || h.includes('sale value'));
+      const isPOSFormat = hasBillNo && (hasItem || hasNetSale);
+      if (isPOSFormat) {
+        const nameI = header.findIndex(h => (h.includes('rcu') || h.includes('customer') || h.includes('party') || h.includes('cust')) && h.includes('name'));
+        const phoneI = header.findIndex(h => h.includes('mobile') || h.includes('contact') || h.includes('rcu') && h.includes('no'));
+        const billNoI = header.findIndex(h => h.includes('bill') && (h.includes('no') || h.includes('number')));
+        const billDateI = header.findIndex(h => h.includes('bill') && h.includes('date'));
+        const itemI = header.findIndex(h => h.includes('item') && h.includes('name'));
+        const brandI = header.findIndex(h => h.includes('brand'));
+        const amountI = header.findIndex(h => h.includes('net sale value') || h.includes('sale value') || h.includes('net amount') || h === 'amount');
+        if (nameI < 0 || phoneI < 0 || amountI < 0) {
+          alert('Could not detect required POS columns. Need customer name, mobile number, and net sale value.');
+          return;
+        }
+        const customersMap = {};
+        const billsMap = {};
+        rows.slice(1).forEach(r => {
+          const phone = normalizePhone(cell(r[phoneI]));
+          const name = cell(r[nameI]);
+          const billNo = cell(r[billNoI]);
+          const date = parseAnyDate(r[billDateI]);
+          const amount = num(r[amountI]);
+          const item = cell(r[itemI]);
+          const brand = cell(r[brandI]);
+          if (!phone || phone.length < 7 || !name) return;
+          if (!customersMap[phone]) {
+            customersMap[phone] = {
+              id: uid(),
+              name,
+              phone,
+              birthday: '',
+              anniversary: '',
+              notes: '',
+              tags: [],
+              createdAt: Date.now()
+            };
+          }
+          if (!billNo) return;
+          if (!billsMap[billNo]) {
+            billsMap[billNo] = {
+              billNo,
+              phone,
+              date,
+              total: 0,
+              items: [],
+              categories: {}
+            };
+          }
+          billsMap[billNo].total += amount;
+          billsMap[billNo].items.push(item || brand || 'Item');
+          const cat = inferCategory(item, brand);
+          billsMap[billNo].categories[cat] = (billsMap[billNo].categories[cat] || 0) + amount;
+        });
+        const newCustomers = Object.values(customersMap);
+        const bills = Object.values(billsMap);
+        if (newCustomers.length === 0) {
+          alert('No valid rows found. Check that name and phone columns have data.');
+          return;
+        }
+        setImportPreview({
+          type: 'pos',
+          newCustomers,
+          bills
+        });
+      } else {
+        const nameI = header.findIndex(h => h.includes('name'));
+        const phoneI = header.findIndex(h => h.includes('phone') || h.includes('mobile') || h.includes('number') || h.includes('contact'));
+        const bdayI = header.findIndex(h => h.includes('birth') || h.includes('dob'));
+        const annI = header.findIndex(h => h.includes('anniv'));
+        const noteI = header.findIndex(h => h.includes('note') || h.includes('remark'));
+        if (nameI < 0 || phoneI < 0) {
+          alert('Excel file must have "Name" and "Phone" columns in the first row.');
+          return;
+        }
+        const parsed = rows.slice(1).map(r => ({
+          id: uid(),
+          name: cell(r[nameI]),
+          phone: normalizePhone(cell(r[phoneI])),
+          birthday: bdayI >= 0 ? parseAnyDate(r[bdayI]) : '',
+          anniversary: annI >= 0 ? parseAnyDate(r[annI]) : '',
+          notes: noteI >= 0 ? cell(r[noteI]) : '',
+          tags: [],
+          createdAt: Date.now()
+        })).filter(c => c.name && c.phone.length >= 7);
+        const seen = new Set();
+        const dedup = parsed.filter(c => {
+          if (seen.has(c.phone)) return false;
+          seen.add(c.phone);
+          return true;
+        });
+        if (dedup.length === 0) {
+          alert('No valid rows found. Check that Name and Phone columns have data.');
+          return;
+        }
+        setImportPreview({
+          type: 'simple',
+          newCustomers: dedup,
+          bills: []
+        });
+      }
+    } catch (err) {
+      alert('Failed to read Excel file: ' + err.message);
+    }
+    e.target.value = '';
+  };
+  const handleImport = async payload => {
+    const incomingCustomers = payload.newCustomers || [];
+    const bills = payload.bills || [];
+    const byPhone = new Map(customers.map(c => [normalizePhone(c.phone), c]));
+    const customersToAdd = incomingCustomers.filter(c => !byPhone.has(normalizePhone(c.phone)));
+    customersToAdd.forEach(c => byPhone.set(normalizePhone(c.phone), c));
+    if (customersToAdd.length > 0) {
+      await saveCustomers([...customersToAdd, ...customers]);
+    }
+    const existingBillNos = new Set(purchases.map(p => p.billNo).filter(Boolean));
+    const newPurchases = [];
+    let skippedBills = 0;
+    bills.forEach(b => {
+      if (b.billNo && existingBillNos.has(b.billNo)) {
+        skippedBills++;
+        return;
+      }
+      const cust = byPhone.get(normalizePhone(b.phone));
+      if (!cust) return;
+      const topCat = Object.entries(b.categories || {}).sort((a, z) => z[1] - a[1])[0];
+      const itemsList = (b.items || []).slice(0, 5).join(', ');
+      const extra = (b.items?.length || 0) > 5 ? `, +${b.items.length - 5} more` : '';
+      newPurchases.push({
+        id: uid(),
+        customerId: cust.id,
+        date: b.date || today(),
+        amount: Math.round(b.total * 100) / 100,
+        category: topCat?.[0] || 'Other',
+        paymentMode: 'Cash',
+        billNo: b.billNo || '',
+        notes: itemsList + extra,
+        createdAt: Date.now()
+      });
+      if (b.billNo) existingBillNos.add(b.billNo);
+    });
+    if (newPurchases.length > 0) {
+      await savePurchases([...newPurchases, ...purchases]);
+    }
+    const skippedC = incomingCustomers.length - customersToAdd.length;
+    const parts = [`${customersToAdd.length} customers`];
+    if (bills.length > 0) parts.push(`${newPurchases.length} sales`);
+    const dup = skippedC + skippedBills;
+    const msg = `Imported ${parts.join(', ')}` + (dup > 0 ? ` (skipped ${dup} duplicates)` : '');
+    showToast(msg);
+  };
+
+  // ===== Derived data per customer =====
+  const stats = useMemo(() => {
+    const map = {};
+    customers.forEach(c => {
+      map[c.id] = {
+        totalSpent: 0,
+        visits: 0,
+        lastVisit: null,
+        firstVisit: null,
+        lastCall: null
+      };
+    });
+    purchases.forEach(p => {
+      const s = map[p.customerId];
+      if (!s) return;
+      s.totalSpent += Number(p.amount) || 0;
+      s.visits += 1;
+      if (!s.lastVisit || p.date > s.lastVisit) s.lastVisit = p.date;
+      if (!s.firstVisit || p.date < s.firstVisit) s.firstVisit = p.date;
+    });
+    calls.forEach(k => {
+      const s = map[k.customerId];
+      if (!s) return;
+      if (!s.lastCall || k.createdAt > s.lastCall.createdAt) s.lastCall = k;
+    });
+    return map;
+  }, [customers, purchases, calls]);
+  const enriched = useMemo(() => {
+    return customers.map(c => {
+      const s = stats[c.id] || {};
+      const dsl = s.lastVisit ? daysSince(s.lastVisit) : null;
+      return {
+        ...c,
+        totalSpent: s.totalSpent || 0,
+        visits: s.visits || 0,
+        lastVisit: s.lastVisit || null,
+        firstVisit: s.firstVisit || null,
+        daysSinceLastVisit: dsl,
+        avgOrder: s.visits ? Math.round(s.totalSpent / s.visits) : 0,
+        isDormant: dsl !== null && dsl > DORMANT_DAYS,
+        lastCall: s.lastCall || null
+      };
+    });
+  }, [customers, stats]);
+  const selectedCustomer = enriched.find(c => c.id === selectedCustomerId);
+  if (loading) {
+    return /*#__PURE__*/React.createElement(LoadingScreen, null);
+  }
+  if (!isAuthed) {
+    return /*#__PURE__*/React.createElement(LoginScreen, {
+      onLogin: handleLogin
+    });
+  }
+  return /*#__PURE__*/React.createElement("div", {
+    className: "min-h-screen w-full bg-stone-50 font-body text-stone-900"
+  }, /*#__PURE__*/React.createElement(FontStyles, null), /*#__PURE__*/React.createElement(Shell, {
+    view: view,
+    setView: v => {
+      setView(v);
+      setSelectedCustomerId(null);
+    },
+    hasData: customers.length > 0,
+    onImport: triggerImport
+  }, view === 'dashboard' && /*#__PURE__*/React.createElement(Dashboard, {
+    customers: enriched,
+    purchases: purchases,
+    onQuickAdd: () => setQuickAddModal(true),
+    onAddCustomer: () => setCustomerModal({
+      mode: 'add'
+    }),
+    onOpenCustomer: id => {
+      setSelectedCustomerId(id);
+      setView('customer-detail');
+    },
+    onViewAll: v => setView(v)
+  }), view === 'customers' && /*#__PURE__*/React.createElement(CustomersList, {
+    customers: enriched,
+    onAdd: () => setCustomerModal({
+      mode: 'add'
+    }),
+    onOpen: id => {
+      setSelectedCustomerId(id);
+      setView('customer-detail');
+    },
+    onQuickAddPurchase: () => setQuickAddModal(true)
+  }), view === 'customer-detail' && selectedCustomer && /*#__PURE__*/React.createElement(CustomerDetail, {
+    customer: selectedCustomer,
+    purchases: purchases.filter(p => p.customerId === selectedCustomer.id),
+    calls: calls.filter(k => k.customerId === selectedCustomer.id),
+    onBack: () => setView('customers'),
+    onEdit: () => setCustomerModal({
+      mode: 'edit',
+      customer: selectedCustomer
+    }),
+    onDelete: () => deleteCustomer(selectedCustomer.id),
+    onAddPurchase: () => setPurchaseModal({
+      customer: selectedCustomer
+    }),
+    onDeletePurchase: deletePurchase,
+    onLogCall: () => setCallModal({
+      customer: selectedCustomer
+    }),
+    onDeleteCall: deleteCall,
+    onUpdateCall: updateCall
+  }), view === 'calls' && /*#__PURE__*/React.createElement(CallsView, {
+    customers: enriched,
+    calls: calls,
+    onAddCall: addCall,
+    onUpdateCall: updateCall,
+    onOpenCustomer: id => {
+      setSelectedCustomerId(id);
+      setView('customer-detail');
+    },
+    onOpenCallForm: customer => setCallModal({
+      customer
+    })
+  }), view === 'purchases' && /*#__PURE__*/React.createElement(AllPurchases, {
+    purchases: purchases,
+    customers: customers,
+    onOpenCustomer: id => {
+      setSelectedCustomerId(id);
+      setView('customer-detail');
+    },
+    onDeletePurchase: deletePurchase
+  }), view === 'leaderboard' && /*#__PURE__*/React.createElement(Leaderboard, {
+    customers: enriched,
+    onOpenCustomer: id => {
+      setSelectedCustomerId(id);
+      setView('customer-detail');
+    }
+  }), view === 'settings' && /*#__PURE__*/React.createElement(SettingsView, {
+    customers: customers,
+    purchases: purchases,
+    enriched: enriched,
+    onTriggerImport: triggerImport,
+    onLogout: () => {
+      setConfirmModal({
+        title: 'Logout?',
+        message: 'You will need to enter the password again to access the customer book.',
+        confirmLabel: 'Logout',
+        onConfirm: handleLogout
+      });
+    },
+    onClearAll: () => {
+      setConfirmModal({
+        title: 'Delete EVERYTHING?',
+        message: 'This will permanently delete all customers, sales, and call records. This cannot be undone.',
+        onConfirm: async () => {
+          await saveCustomers([]);
+          await savePurchases([]);
+          await saveCalls([]);
+          showToast('All data cleared');
+        }
+      });
+    }
+  })), view !== 'settings' && /*#__PURE__*/React.createElement("button", {
+    onClick: () => setQuickAddModal(true),
+    className: "fixed bottom-20 md:bottom-6 right-4 md:right-6 z-30 h-14 w-14 rounded-full bg-stone-900 text-amber-50 shadow-lg shadow-stone-900/30 flex items-center justify-center hover:bg-stone-800 active:scale-95 transition",
+    title: "Quick add purchase"
+  }, /*#__PURE__*/React.createElement(Zap, {
+    size: 22
+  })), customerModal && /*#__PURE__*/React.createElement(CustomerFormModal, {
+    mode: customerModal.mode,
+    customer: customerModal.customer,
+    onClose: () => setCustomerModal(null),
+    onSave: async data => {
+      const id = await upsertCustomer(data);
+      if (id) setCustomerModal(null);
+    }
+  }), purchaseModal && /*#__PURE__*/React.createElement(PurchaseFormModal, {
+    customer: purchaseModal.customer,
+    onClose: () => setPurchaseModal(null),
+    onSave: async data => {
+      const ok = await addPurchase(data);
+      if (ok) setPurchaseModal(null);
+    }
+  }), quickAddModal && /*#__PURE__*/React.createElement(QuickAddModal, {
+    customers: enriched,
+    onClose: () => setQuickAddModal(false),
+    onNeedNewCustomer: phone => {
+      setQuickAddModal(false);
+      setCustomerModal({
+        mode: 'add',
+        customer: {
+          phone
+        }
+      });
+    },
+    onAddPurchase: async data => {
+      const ok = await addPurchase(data);
+      if (ok) setQuickAddModal(false);
+    }
+  }), callModal && /*#__PURE__*/React.createElement(CallFormModal, {
+    customer: callModal.customer,
+    onClose: () => setCallModal(null),
+    onSave: async data => {
+      const ok = await addCall({
+        ...data,
+        customerId: callModal.customer.id
+      });
+      if (ok) setCallModal(null);
+    }
+  }), confirmModal && /*#__PURE__*/React.createElement(ConfirmModal, _extends({}, confirmModal, {
+    onClose: () => setConfirmModal(null),
+    onConfirm: async () => {
+      await confirmModal.onConfirm();
+      setConfirmModal(null);
+    }
+  })), /*#__PURE__*/React.createElement("input", {
+    ref: fileImportRef,
+    type: "file",
+    accept: ".xlsx,.xls,.csv",
+    onChange: handleFile,
+    className: "hidden"
+  }), importPreview && /*#__PURE__*/React.createElement(ConfirmModal, {
+    title: importPreview.type === 'pos' ? `Import ${importPreview.newCustomers.length} customers and ${importPreview.bills.length} sales?` : `Import ${importPreview.newCustomers.length} customers?`,
+    message: importPreview.type === 'pos' ? `POS bill export detected. ${importPreview.newCustomers.length} unique customers, ${importPreview.bills.length} bills totalling ${formatINR(importPreview.bills.reduce((s, b) => s + (b.total || 0), 0))}. Duplicates by phone or bill no. will be skipped.` : `Found ${importPreview.newCustomers.length} customers. Preview: ${importPreview.newCustomers.slice(0, 3).map(c => c.name).join(', ')}${importPreview.newCustomers.length > 3 ? `, +${importPreview.newCustomers.length - 3} more` : ''}. Duplicates by phone will be skipped.`,
+    confirmLabel: "Import",
+    onConfirm: async () => {
+      await handleImport(importPreview);
+      setImportPreview(null);
+    },
+    onClose: () => setImportPreview(null)
+  }), toast && /*#__PURE__*/React.createElement("div", {
+    className: `fixed top-4 left-1/2 -translate-x-1/2 z-50 px-5 py-2.5 rounded-full text-sm font-medium shadow-lg ${toast.kind === 'error' ? 'bg-red-600 text-white' : 'bg-stone-900 text-amber-50'}`
+  }, toast.msg));
+}
+
+// ============ FONT STYLES ============
+function FontStyles() {
+  return /*#__PURE__*/React.createElement("style", null, `
+      @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=DM+Sans:wght@400;500;600;700&display=swap');
+      .font-display { font-family: 'Fraunces', Georgia, serif; font-feature-settings: "ss01"; letter-spacing: -0.01em; }
+      .font-body { font-family: 'DM Sans', system-ui, sans-serif; }
+      .font-mono-num { font-variant-numeric: tabular-nums; }
+      .scrollbar-thin::-webkit-scrollbar { width: 6px; height: 6px; }
+      .scrollbar-thin::-webkit-scrollbar-thumb { background: #d6d3d1; border-radius: 3px; }
+      .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+    `);
+}
+
+// ============ LOADING ============
+function LoadingScreen() {
+  return /*#__PURE__*/React.createElement("div", {
+    className: "min-h-screen w-full bg-stone-50 flex items-center justify-center"
+  }, /*#__PURE__*/React.createElement(FontStyles, null), /*#__PURE__*/React.createElement("div", {
+    className: "text-center"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "font-display text-3xl text-stone-900 tracking-tight"
+  }, "Pal Mens Wear"), /*#__PURE__*/React.createElement("div", {
+    className: "text-xs uppercase tracking-[0.3em] text-stone-500 mt-1"
+  }, "Customer Book"), /*#__PURE__*/React.createElement("div", {
+    className: "mt-6 inline-flex items-center gap-2 text-stone-500 text-sm"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "h-1.5 w-1.5 rounded-full bg-stone-400 animate-pulse"
+  }), "Loading...")));
+}
+
+// ============ LOGIN SCREEN ============
+function LoginScreen({
+  onLogin
+}) {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPw, setShowPw] = useState(false);
+  const [error, setError] = useState('');
+  const [attempting, setAttempting] = useState(false);
+  const submit = async () => {
+    if (attempting) return;
+    setAttempting(true);
+    setError('');
+    const {
+      error: err
+    } = await window._supabase.auth.signInWithPassword({
+      email: username.trim(),
+      password
+    });
+    if (err) {
+      setError(err.message || 'Wrong email or password');
+      setAttempting(false);
+    } else {
+      onLogin();
+    }
+  };
+  const onKeyDown = e => {
+    if (e.key === 'Enter') submit();
+  };
+  return /*#__PURE__*/React.createElement("div", {
+    className: "min-h-screen w-full bg-stone-50 font-body text-stone-900 flex items-center justify-center px-4"
+  }, /*#__PURE__*/React.createElement(FontStyles, null), /*#__PURE__*/React.createElement("div", {
+    className: "w-full max-w-sm"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "text-center mb-7"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "h-14 w-14 mx-auto rounded-md bg-stone-900 text-amber-50 flex items-center justify-center font-display text-2xl font-semibold mb-3"
+  }, "P"), /*#__PURE__*/React.createElement("div", {
+    className: "font-display text-3xl text-stone-900 leading-tight"
+  }, "Pal Mens Wear"), /*#__PURE__*/React.createElement("div", {
+    className: "text-[10px] uppercase tracking-[0.3em] text-stone-500 mt-1"
+  }, "Customer Book")), /*#__PURE__*/React.createElement("div", {
+    className: "bg-white border border-stone-200 rounded-lg p-5 md:p-6 shadow-sm"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center gap-2 mb-5"
+  }, /*#__PURE__*/React.createElement(Lock, {
+    size: 15,
+    className: "text-stone-700"
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "font-display text-lg text-stone-900"
+  }, "Sign in")), /*#__PURE__*/React.createElement("div", {
+    className: "space-y-4"
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+    className: "block text-xs uppercase tracking-wider text-stone-600 mb-1"
+  }, "Email"), /*#__PURE__*/React.createElement("input", {
+    autoFocus: true,
+    value: username,
+    onChange: e => {
+      setUsername(e.target.value);
+      setError('');
+    },
+    onKeyDown: onKeyDown,
+    autoComplete: "email",
+    type: "email",
+    className: "w-full px-3 py-2.5 bg-white border border-stone-200 rounded-md text-sm focus:outline-none focus:border-stone-500"
+  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+    className: "block text-xs uppercase tracking-wider text-stone-600 mb-1"
+  }, "Password"), /*#__PURE__*/React.createElement("div", {
+    className: "relative"
+  }, /*#__PURE__*/React.createElement("input", {
+    type: showPw ? 'text' : 'password',
+    value: password,
+    onChange: e => {
+      setPassword(e.target.value);
+      setError('');
+    },
+    onKeyDown: onKeyDown,
+    autoComplete: "current-password",
+    className: "w-full px-3 py-2.5 pr-10 bg-white border border-stone-200 rounded-md text-sm focus:outline-none focus:border-stone-500"
+  }), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: () => setShowPw(s => !s),
+    className: "absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-stone-500 hover:text-stone-800",
+    title: showPw ? 'Hide password' : 'Show password'
+  }, showPw ? /*#__PURE__*/React.createElement(EyeOff, {
+    size: 15
+  }) : /*#__PURE__*/React.createElement(Eye, {
+    size: 15
+  })))), error && /*#__PURE__*/React.createElement("div", {
+    className: "text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded-md px-3 py-2 flex items-center gap-2"
+  }, /*#__PURE__*/React.createElement(AlertCircle, {
+    size: 14
+  }), " ", error), /*#__PURE__*/React.createElement("button", {
+    onClick: submit,
+    disabled: attempting,
+    className: "w-full py-2.5 bg-stone-900 text-amber-50 rounded-md text-sm font-medium hover:bg-stone-800 inline-flex items-center justify-center gap-2 disabled:opacity-60"
+  }, attempting ? 'Signing in…' : 'Sign in'))), /*#__PURE__*/React.createElement("p", {
+    className: "text-center text-[11px] text-stone-400 mt-5"
+  }, "Private to Pal Mens Wear staff. Don't share credentials.")));
+}
+
+// ============ SHELL (header + nav) ============
+function Shell({
+  view,
+  setView,
+  hasData,
+  onImport,
+  children
+}) {
+  const navItems = [{
+    id: 'dashboard',
+    label: 'Home',
+    icon: LayoutDashboard
+  }, {
+    id: 'customers',
+    label: 'Customers',
+    icon: Users
+  }, {
+    id: 'calls',
+    label: 'Calls',
+    icon: Phone
+  }, {
+    id: 'purchases',
+    label: 'Sales',
+    icon: ShoppingBag
+  }, {
+    id: 'leaderboard',
+    label: 'Top',
+    icon: Trophy
+  }, {
+    id: 'settings',
+    label: 'Settings',
+    icon: SettingsIcon
+  }];
+  return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("header", {
+    className: "sticky top-0 z-20 bg-stone-50/90 backdrop-blur border-b border-stone-200"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "max-w-6xl mx-auto px-4 md:px-6 py-3 md:py-4 flex items-center justify-between gap-3"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center gap-3 min-w-0"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "h-9 w-9 rounded-md bg-stone-900 text-amber-50 flex items-center justify-center font-display font-semibold shrink-0"
+  }, "P"), /*#__PURE__*/React.createElement("div", {
+    className: "min-w-0"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "font-display text-lg md:text-xl font-semibold text-stone-900 leading-tight truncate"
+  }, "Pal Mens Wear"), /*#__PURE__*/React.createElement("div", {
+    className: "text-[10px] md:text-xs uppercase tracking-[0.25em] text-stone-500"
+  }, "Customer Book"))), /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center gap-2 shrink-0"
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: onImport,
+    className: "px-2.5 md:px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-1.5 bg-amber-100 text-amber-900 hover:bg-amber-200 border border-amber-300 transition",
+    title: "Import Excel"
+  }, /*#__PURE__*/React.createElement(Upload, {
+    size: 15
+  }), /*#__PURE__*/React.createElement("span", {
+    className: "hidden sm:inline"
+  }, "Import")), /*#__PURE__*/React.createElement("nav", {
+    className: "hidden md:flex items-center gap-1 ml-1 pl-2 border-l border-stone-200"
+  }, navItems.map(n => {
+    const Icon = n.icon;
+    const active = view === n.id || n.id === 'customers' && view === 'customer-detail';
+    return /*#__PURE__*/React.createElement("button", {
+      key: n.id,
+      onClick: () => setView(n.id),
+      className: `px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition ${active ? 'bg-stone-900 text-amber-50' : 'text-stone-600 hover:bg-stone-200/60'}`
+    }, /*#__PURE__*/React.createElement(Icon, {
+      size: 16
+    }), n.label);
+  }))))), /*#__PURE__*/React.createElement("main", {
+    className: "max-w-6xl mx-auto px-4 md:px-6 py-5 md:py-8 pb-24 md:pb-12"
+  }, children), /*#__PURE__*/React.createElement("nav", {
+    className: "md:hidden fixed bottom-0 left-0 right-0 z-20 bg-white/95 backdrop-blur border-t border-stone-200"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "grid grid-cols-6"
+  }, navItems.map(n => {
+    const Icon = n.icon;
+    const active = view === n.id || n.id === 'customers' && view === 'customer-detail';
+    return /*#__PURE__*/React.createElement("button", {
+      key: n.id,
+      onClick: () => setView(n.id),
+      className: `py-2.5 flex flex-col items-center gap-0.5 text-[10px] font-medium ${active ? 'text-stone-900' : 'text-stone-500'}`
+    }, /*#__PURE__*/React.createElement(Icon, {
+      size: 20,
+      strokeWidth: active ? 2.2 : 1.7
+    }), n.label);
+  }))));
+}
+
+// ============ DASHBOARD ============
+function Dashboard({
+  customers,
+  purchases,
+  onQuickAdd,
+  onAddCustomer,
+  onOpenCustomer,
+  onViewAll
+}) {
+  const empty = customers.length === 0;
+  const totalRevenue = useMemo(() => purchases.reduce((s, p) => s + (Number(p.amount) || 0), 0), [purchases]);
+  const thisMonth = new Date();
+  const thisMonthRev = useMemo(() => {
+    const ym = thisMonth.toISOString().slice(0, 7);
+    return purchases.filter(p => p.date?.startsWith(ym)).reduce((s, p) => s + (Number(p.amount) || 0), 0);
+  }, [purchases]);
+  const lastMonthRev = useMemo(() => {
+    const d = new Date();
+    d.setMonth(d.getMonth() - 1);
+    const ym = d.toISOString().slice(0, 7);
+    return purchases.filter(p => p.date?.startsWith(ym)).reduce((s, p) => s + (Number(p.amount) || 0), 0);
+  }, [purchases]);
+  const topByMoney = useMemo(() => [...customers].sort((a, b) => b.totalSpent - a.totalSpent).slice(0, 5), [customers]);
+  const dormant = useMemo(() => customers.filter(c => c.isDormant && c.visits > 0).length, [customers]);
+  const birthdaysThisMonth = useMemo(() => {
+    const m = new Date().getMonth();
+    return customers.filter(c => c.birthday && new Date(c.birthday).getMonth() === m);
+  }, [customers]);
+  if (empty) {
+    return /*#__PURE__*/React.createElement("div", {
+      className: "text-center py-12 md:py-20"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "inline-flex h-16 w-16 rounded-full bg-stone-900 text-amber-50 items-center justify-center mb-5"
+    }, /*#__PURE__*/React.createElement(Sparkles, {
+      size: 28
+    })), /*#__PURE__*/React.createElement("h2", {
+      className: "font-display text-3xl md:text-4xl text-stone-900"
+    }, "Welcome to your customer book"), /*#__PURE__*/React.createElement("p", {
+      className: "text-stone-600 mt-3 max-w-md mx-auto"
+    }, "Start by adding your first customer, or import your existing list from a CSV file."), /*#__PURE__*/React.createElement("div", {
+      className: "mt-6 flex flex-wrap gap-3 justify-center"
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: onAddCustomer,
+      className: "px-5 py-2.5 bg-stone-900 text-amber-50 rounded-md font-medium hover:bg-stone-800 inline-flex items-center gap-2"
+    }, /*#__PURE__*/React.createElement(Plus, {
+      size: 18
+    }), " Add first customer"), /*#__PURE__*/React.createElement("button", {
+      onClick: () => onViewAll('settings'),
+      className: "px-5 py-2.5 bg-white border border-stone-300 rounded-md font-medium hover:bg-stone-50 inline-flex items-center gap-2"
+    }, /*#__PURE__*/React.createElement(Upload, {
+      size: 18
+    }), " Import CSV")));
+  }
+  return /*#__PURE__*/React.createElement("div", {
+    className: "space-y-6 md:space-y-8"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex items-end justify-between"
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    className: "text-xs uppercase tracking-[0.25em] text-stone-500"
+  }, "Overview"), /*#__PURE__*/React.createElement("h1", {
+    className: "font-display text-3xl md:text-4xl text-stone-900 mt-1"
+  }, "Good ", greetingTime())), /*#__PURE__*/React.createElement("button", {
+    onClick: onQuickAdd,
+    className: "hidden md:inline-flex px-4 py-2 bg-stone-900 text-amber-50 rounded-md text-sm font-medium hover:bg-stone-800 items-center gap-2"
+  }, /*#__PURE__*/React.createElement(Zap, {
+    size: 16
+  }), " Quick add purchase")), /*#__PURE__*/React.createElement("div", {
+    className: "grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4"
+  }, /*#__PURE__*/React.createElement(StatCard, {
+    label: "Customers",
+    value: customers.length,
+    icon: Users
+  }), /*#__PURE__*/React.createElement(StatCard, {
+    label: "Total sales",
+    value: formatINR(totalRevenue),
+    icon: IndianRupee
+  }), /*#__PURE__*/React.createElement(StatCard, {
+    label: "This month",
+    value: formatINR(thisMonthRev),
+    icon: TrendingUp,
+    sub: lastMonthRev > 0 ? `vs ${formatINR(lastMonthRev)} last` : null
+  }), /*#__PURE__*/React.createElement(StatCard, {
+    label: "Dormant",
+    value: dormant,
+    icon: AlertCircle,
+    sub: `${DORMANT_DAYS}+ days`,
+    accent: dormant > 0 ? 'warn' : null
+  })), /*#__PURE__*/React.createElement("section", {
+    className: "bg-white border border-stone-200 rounded-lg overflow-hidden"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "px-5 py-4 border-b border-stone-200 flex items-center justify-between"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center gap-2"
+  }, /*#__PURE__*/React.createElement(Trophy, {
+    size: 16,
+    className: "text-amber-700"
+  }), /*#__PURE__*/React.createElement("h3", {
+    className: "font-display text-lg text-stone-900"
+  }, "Top spenders")), /*#__PURE__*/React.createElement("button", {
+    onClick: () => onViewAll('leaderboard'),
+    className: "text-xs text-stone-600 hover:text-stone-900 inline-flex items-center gap-1"
+  }, "See all ", /*#__PURE__*/React.createElement(ChevronRight, {
+    size: 14
+  }))), topByMoney.length === 0 || topByMoney[0].totalSpent === 0 ? /*#__PURE__*/React.createElement("div", {
+    className: "px-5 py-8 text-center text-stone-500 text-sm"
+  }, "No purchases recorded yet. Add a sale to see your top customers here.") : /*#__PURE__*/React.createElement("ul", {
+    className: "divide-y divide-stone-100"
+  }, topByMoney.filter(c => c.totalSpent > 0).map((c, i) => /*#__PURE__*/React.createElement("li", {
+    key: c.id
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => onOpenCustomer(c.id),
+    className: "w-full px-5 py-3.5 flex items-center gap-3 hover:bg-stone-50 text-left"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: `h-7 w-7 rounded-full flex items-center justify-center text-xs font-semibold ${i === 0 ? 'bg-amber-200 text-amber-900' : i === 1 ? 'bg-stone-300 text-stone-800' : i === 2 ? 'bg-orange-200 text-orange-900' : 'bg-stone-100 text-stone-600'}`
+  }, i + 1), /*#__PURE__*/React.createElement(Avatar, {
+    name: c.name
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "flex-1 min-w-0"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "font-medium text-stone-900 truncate"
+  }, c.name), /*#__PURE__*/React.createElement("div", {
+    className: "text-xs text-stone-500"
+  }, c.visits, " visit", c.visits !== 1 ? 's' : '', " \xB7 last ", formatDate(c.lastVisit))), /*#__PURE__*/React.createElement("div", {
+    className: "text-right"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "font-mono-num font-semibold text-stone-900"
+  }, formatINR(c.totalSpent)))))))), /*#__PURE__*/React.createElement("div", {
+    className: "grid md:grid-cols-2 gap-4"
+  }, /*#__PURE__*/React.createElement("section", {
+    className: "bg-white border border-stone-200 rounded-lg p-5"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center gap-2 mb-3"
+  }, /*#__PURE__*/React.createElement(Cake, {
+    size: 16,
+    className: "text-rose-600"
+  }), /*#__PURE__*/React.createElement("h3", {
+    className: "font-display text-lg text-stone-900"
+  }, "Birthdays in ", monthName(new Date().getMonth()))), birthdaysThisMonth.length === 0 ? /*#__PURE__*/React.createElement("p", {
+    className: "text-sm text-stone-500"
+  }, "No birthdays this month.") : /*#__PURE__*/React.createElement("ul", {
+    className: "space-y-2"
+  }, birthdaysThisMonth.slice(0, 5).map(c => /*#__PURE__*/React.createElement("li", {
+    key: c.id,
+    className: "flex items-center justify-between text-sm"
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => onOpenCustomer(c.id),
+    className: "font-medium text-stone-900 hover:underline"
+  }, c.name), /*#__PURE__*/React.createElement("span", {
+    className: "text-stone-500"
+  }, formatDate(c.birthday).split(' ').slice(0, 2).join(' ')))), birthdaysThisMonth.length > 5 && /*#__PURE__*/React.createElement("li", {
+    className: "text-xs text-stone-500"
+  }, "+", birthdaysThisMonth.length - 5, " more"))), /*#__PURE__*/React.createElement("section", {
+    className: "bg-white border border-stone-200 rounded-lg p-5"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center gap-2 mb-3"
+  }, /*#__PURE__*/React.createElement(Activity, {
+    size: 16,
+    className: "text-stone-700"
+  }), /*#__PURE__*/React.createElement("h3", {
+    className: "font-display text-lg text-stone-900"
+  }, "Quick actions")), /*#__PURE__*/React.createElement("div", {
+    className: "grid grid-cols-2 gap-2"
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: onAddCustomer,
+    className: "px-3 py-3 bg-stone-50 border border-stone-200 rounded-md text-sm font-medium hover:bg-stone-100 inline-flex items-center justify-center gap-2"
+  }, /*#__PURE__*/React.createElement(Plus, {
+    size: 15
+  }), " New customer"), /*#__PURE__*/React.createElement("button", {
+    onClick: onQuickAdd,
+    className: "px-3 py-3 bg-stone-50 border border-stone-200 rounded-md text-sm font-medium hover:bg-stone-100 inline-flex items-center justify-center gap-2"
+  }, /*#__PURE__*/React.createElement(ShoppingBag, {
+    size: 15
+  }), " Add sale"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => onViewAll('customers'),
+    className: "px-3 py-3 bg-stone-50 border border-stone-200 rounded-md text-sm font-medium hover:bg-stone-100 inline-flex items-center justify-center gap-2"
+  }, /*#__PURE__*/React.createElement(Users, {
+    size: 15
+  }), " All customers"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => onViewAll('leaderboard'),
+    className: "px-3 py-3 bg-stone-50 border border-stone-200 rounded-md text-sm font-medium hover:bg-stone-100 inline-flex items-center justify-center gap-2"
+  }, /*#__PURE__*/React.createElement(Trophy, {
+    size: 15
+  }), " Leaderboard")))));
+}
+function greetingTime() {
+  const h = new Date().getHours();
+  if (h < 12) return 'morning';
+  if (h < 17) return 'afternoon';
+  return 'evening';
+}
+function StatCard({
+  label,
+  value,
+  icon: Icon,
+  sub,
+  accent
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    className: `bg-white border rounded-lg p-4 ${accent === 'warn' ? 'border-amber-300' : 'border-stone-200'}`
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center justify-between mb-2"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "text-xs uppercase tracking-wider text-stone-500"
+  }, label), /*#__PURE__*/React.createElement(Icon, {
+    size: 14,
+    className: "text-stone-400"
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "font-display text-2xl md:text-3xl font-semibold text-stone-900 font-mono-num"
+  }, value), sub && /*#__PURE__*/React.createElement("div", {
+    className: "text-xs text-stone-500 mt-1"
+  }, sub));
+}
+function Avatar({
+  name,
+  size = 'md'
+}) {
+  const s = size === 'lg' ? 'h-12 w-12 text-base' : 'h-9 w-9 text-xs';
+  return /*#__PURE__*/React.createElement("div", {
+    className: `${s} rounded-full bg-stone-200 text-stone-700 flex items-center justify-center font-semibold shrink-0`
+  }, initials(name));
+}
+
+// ============ CUSTOMERS LIST ============
+function CustomersList({
+  customers,
+  onAdd,
+  onOpen,
+  onQuickAddPurchase
+}) {
+  const [q, setQ] = useState('');
+  const [tagFilter, setTagFilter] = useState('');
+  const [sort, setSort] = useState('recent'); // recent | name | spent | visits
+  const [visibleCount, setVisibleCount] = useState(50);
+  useEffect(() => {
+    setVisibleCount(50);
+  }, [q, tagFilter, sort]);
+  const filtered = useMemo(() => {
+    const qn = q.trim().toLowerCase();
+    const qPhone = normalizePhone(q);
+    let list = customers.filter(c => {
+      if (tagFilter && !(c.tags || []).includes(tagFilter)) return false;
+      if (!qn) return true;
+      return c.name.toLowerCase().includes(qn) || qPhone && normalizePhone(c.phone).includes(qPhone);
+    });
+    if (sort === 'name') list.sort((a, b) => a.name.localeCompare(b.name));else if (sort === 'spent') list.sort((a, b) => b.totalSpent - a.totalSpent);else if (sort === 'visits') list.sort((a, b) => b.visits - a.visits);else list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    return list;
+  }, [customers, q, tagFilter, sort]);
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    className: "flex items-end justify-between mb-4"
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    className: "text-xs uppercase tracking-[0.25em] text-stone-500"
+  }, "Directory"), /*#__PURE__*/React.createElement("h1", {
+    className: "font-display text-3xl text-stone-900 mt-1"
+  }, "Customers ", /*#__PURE__*/React.createElement("span", {
+    className: "text-stone-400 font-normal"
+  }, "(", customers.length, ")"))), /*#__PURE__*/React.createElement("button", {
+    onClick: onAdd,
+    className: "px-4 py-2 bg-stone-900 text-amber-50 rounded-md text-sm font-medium hover:bg-stone-800 inline-flex items-center gap-2"
+  }, /*#__PURE__*/React.createElement(Plus, {
+    size: 16
+  }), " Add")), /*#__PURE__*/React.createElement("div", {
+    className: "space-y-3 mb-4"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "relative"
+  }, /*#__PURE__*/React.createElement(Search, {
+    size: 16,
+    className: "absolute left-3 top-1/2 -translate-y-1/2 text-stone-400"
+  }), /*#__PURE__*/React.createElement("input", {
+    value: q,
+    onChange: e => setQ(e.target.value),
+    placeholder: "Search by name or phone...",
+    className: "w-full pl-9 pr-3 py-2.5 bg-white border border-stone-200 rounded-md text-sm focus:outline-none focus:border-stone-400"
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "flex gap-2 flex-wrap items-center"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "text-xs text-stone-500 uppercase tracking-wider"
+  }, "Sort:"), [['recent', 'Recent'], ['name', 'Name'], ['spent', 'Top spend'], ['visits', 'Top visits']].map(([v, l]) => /*#__PURE__*/React.createElement("button", {
+    key: v,
+    onClick: () => setSort(v),
+    className: `text-xs px-2.5 py-1 rounded-full border ${sort === v ? 'bg-stone-900 text-amber-50 border-stone-900' : 'bg-white text-stone-700 border-stone-200 hover:border-stone-400'}`
+  }, l)), /*#__PURE__*/React.createElement("div", {
+    className: "w-px h-4 bg-stone-300 mx-1"
+  }), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setTagFilter(''),
+    className: `text-xs px-2.5 py-1 rounded-full border ${tagFilter === '' ? 'bg-stone-900 text-amber-50 border-stone-900' : 'bg-white text-stone-700 border-stone-200'}`
+  }, "All tags"), AVAILABLE_TAGS.map(t => /*#__PURE__*/React.createElement("button", {
+    key: t,
+    onClick: () => setTagFilter(t === tagFilter ? '' : t),
+    className: `text-xs px-2.5 py-1 rounded-full border ${tagFilter === t ? 'bg-stone-900 text-amber-50 border-stone-900' : `${TAG_COLORS[t]}`}`
+  }, t)))), filtered.length === 0 ? /*#__PURE__*/React.createElement("div", {
+    className: "bg-white border border-stone-200 rounded-lg py-12 text-center text-stone-500 text-sm"
+  }, customers.length === 0 ? 'No customers yet.' : 'No customers match your search.') : /*#__PURE__*/React.createElement("div", {
+    className: "bg-white border border-stone-200 rounded-lg overflow-hidden"
+  }, /*#__PURE__*/React.createElement("ul", {
+    className: "divide-y divide-stone-100"
+  }, filtered.slice(0, visibleCount).map(c => /*#__PURE__*/React.createElement("li", {
+    key: c.id
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => onOpen(c.id),
+    className: "w-full px-4 py-3 flex items-center gap-3 hover:bg-stone-50 text-left"
+  }, /*#__PURE__*/React.createElement(Avatar, {
+    name: c.name
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "flex-1 min-w-0"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center gap-2"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "font-medium text-stone-900 truncate"
+  }, c.name), c.isDormant && /*#__PURE__*/React.createElement("span", {
+    className: "text-[10px] uppercase tracking-wider px-1.5 py-0.5 bg-amber-50 text-amber-700 rounded"
+  }, "dormant")), /*#__PURE__*/React.createElement("div", {
+    className: "text-xs text-stone-500 flex items-center gap-1.5 mt-0.5"
+  }, /*#__PURE__*/React.createElement(Phone, {
+    size: 11
+  }), " ", c.phone, c.tags && c.tags.length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", null, "\xB7"), /*#__PURE__*/React.createElement("span", {
+    className: "truncate"
+  }, c.tags.join(', '))))), /*#__PURE__*/React.createElement("div", {
+    className: "text-right shrink-0"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "font-mono-num font-semibold text-stone-900 text-sm"
+  }, formatINR(c.totalSpent)), /*#__PURE__*/React.createElement("div", {
+    className: "text-[10px] text-stone-500 uppercase tracking-wider"
+  }, c.visits, " visit", c.visits !== 1 ? 's' : '')), /*#__PURE__*/React.createElement(ChevronRight, {
+    size: 16,
+    className: "text-stone-300"
+  }))))), filtered.length > visibleCount && /*#__PURE__*/React.createElement("div", {
+    className: "px-4 py-4 bg-stone-50 border-t border-stone-200 text-center"
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => setVisibleCount(c => c + 50),
+    className: "text-sm font-medium text-stone-700 hover:text-stone-900 inline-flex items-center gap-1.5"
+  }, "Show 50 more ", /*#__PURE__*/React.createElement(ChevronRight, {
+    size: 14
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "text-[10px] text-stone-400 mt-1"
+  }, "Showing ", visibleCount, " of ", filtered.length))));
+}
+
+// ============ CUSTOMER DETAIL ============
+function CustomerDetail({
+  customer,
+  purchases,
+  calls,
+  onBack,
+  onEdit,
+  onDelete,
+  onAddPurchase,
+  onDeletePurchase,
+  onLogCall,
+  onDeleteCall,
+  onUpdateCall
+}) {
+  const sorted = [...purchases].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const sortedCalls = [...(calls || [])].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  const whatsappLink = `https://wa.me/${phoneForLink(customer.phone)}`;
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("button", {
+    onClick: onBack,
+    className: "text-sm text-stone-600 hover:text-stone-900 inline-flex items-center gap-1 mb-4"
+  }, /*#__PURE__*/React.createElement(ArrowLeft, {
+    size: 15
+  }), " Back to customers"), /*#__PURE__*/React.createElement("div", {
+    className: "bg-white border border-stone-200 rounded-lg p-5 md:p-6 mb-5"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex items-start gap-4"
+  }, /*#__PURE__*/React.createElement(Avatar, {
+    name: customer.name,
+    size: "lg"
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "flex-1 min-w-0"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex items-start justify-between gap-3"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "min-w-0"
+  }, /*#__PURE__*/React.createElement("h1", {
+    className: "font-display text-2xl md:text-3xl text-stone-900 leading-tight"
+  }, customer.name), /*#__PURE__*/React.createElement("div", {
+    className: "text-sm text-stone-600 mt-1 flex items-center gap-1.5"
+  }, /*#__PURE__*/React.createElement(Phone, {
+    size: 13
+  }), " ", customer.phone)), /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center gap-1.5 shrink-0"
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: onEdit,
+    title: "Edit",
+    className: "h-9 w-9 rounded-md bg-stone-50 border border-stone-200 hover:bg-stone-100 flex items-center justify-center"
+  }, /*#__PURE__*/React.createElement(Edit2, {
+    size: 15
+  })), /*#__PURE__*/React.createElement("a", {
+    href: whatsappLink,
+    target: "_blank",
+    rel: "noreferrer",
+    title: "WhatsApp",
+    className: "h-9 w-9 rounded-md bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 flex items-center justify-center text-emerald-700"
+  }, /*#__PURE__*/React.createElement(MessageCircle, {
+    size: 15
+  })), /*#__PURE__*/React.createElement("button", {
+    onClick: onDelete,
+    title: "Delete",
+    className: "h-9 w-9 rounded-md bg-rose-50 border border-rose-200 hover:bg-rose-100 flex items-center justify-center text-rose-700"
+  }, /*#__PURE__*/React.createElement(Trash2, {
+    size: 15
+  })))), customer.tags && customer.tags.length > 0 && /*#__PURE__*/React.createElement("div", {
+    className: "flex flex-wrap gap-1.5 mt-3"
+  }, customer.tags.map(t => /*#__PURE__*/React.createElement("span", {
+    key: t,
+    className: `text-[11px] px-2 py-0.5 rounded-full border ${TAG_COLORS[t] || 'bg-stone-100 text-stone-700 border-stone-200'}`
+  }, t))), /*#__PURE__*/React.createElement("div", {
+    className: "grid grid-cols-2 md:grid-cols-4 gap-3 mt-4 pt-4 border-t border-stone-100"
+  }, /*#__PURE__*/React.createElement(Stat, {
+    tiny: true,
+    label: "Total spent",
+    value: formatINR(customer.totalSpent)
+  }), /*#__PURE__*/React.createElement(Stat, {
+    tiny: true,
+    label: "Visits",
+    value: customer.visits
+  }), /*#__PURE__*/React.createElement(Stat, {
+    tiny: true,
+    label: "Avg order",
+    value: formatINR(customer.avgOrder)
+  }), /*#__PURE__*/React.createElement(Stat, {
+    tiny: true,
+    label: "Last visit",
+    value: customer.lastVisit ? `${customer.daysSinceLastVisit}d ago` : '—'
+  })), (customer.birthday || customer.anniversary || customer.notes) && /*#__PURE__*/React.createElement("div", {
+    className: "mt-4 pt-4 border-t border-stone-100 space-y-1.5 text-sm"
+  }, customer.birthday && /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center gap-2 text-stone-700"
+  }, /*#__PURE__*/React.createElement(Cake, {
+    size: 13,
+    className: "text-rose-600"
+  }), " Birthday: ", formatDate(customer.birthday)), customer.anniversary && /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center gap-2 text-stone-700"
+  }, /*#__PURE__*/React.createElement(Heart, {
+    size: 13,
+    className: "text-rose-600"
+  }), " Anniversary: ", formatDate(customer.anniversary)), customer.notes && /*#__PURE__*/React.createElement("div", {
+    className: "text-stone-600 italic"
+  }, "\"", customer.notes, "\""))))), /*#__PURE__*/React.createElement("section", {
+    className: "bg-white border border-stone-200 rounded-lg overflow-hidden"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "px-5 py-4 border-b border-stone-200 flex items-center justify-between"
+  }, /*#__PURE__*/React.createElement("h3", {
+    className: "font-display text-lg text-stone-900"
+  }, "Purchase history ", /*#__PURE__*/React.createElement("span", {
+    className: "text-stone-400 font-normal text-sm"
+  }, "(", sorted.length, ")")), /*#__PURE__*/React.createElement("button", {
+    onClick: onAddPurchase,
+    className: "px-3 py-1.5 bg-stone-900 text-amber-50 rounded-md text-xs font-medium hover:bg-stone-800 inline-flex items-center gap-1.5"
+  }, /*#__PURE__*/React.createElement(Plus, {
+    size: 13
+  }), " Add sale")), sorted.length === 0 ? /*#__PURE__*/React.createElement("div", {
+    className: "px-5 py-10 text-center text-stone-500 text-sm"
+  }, "No purchases yet. ", /*#__PURE__*/React.createElement("button", {
+    onClick: onAddPurchase,
+    className: "text-stone-900 underline"
+  }, "Add first sale")) : /*#__PURE__*/React.createElement("ul", {
+    className: "divide-y divide-stone-100"
+  }, sorted.map(p => /*#__PURE__*/React.createElement("li", {
+    key: p.id,
+    className: "px-5 py-3.5 flex items-center gap-3 group"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "h-10 w-10 rounded-md bg-stone-100 text-stone-700 flex items-center justify-center shrink-0"
+  }, /*#__PURE__*/React.createElement(ShoppingBag, {
+    size: 16
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "flex-1 min-w-0"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center gap-2 flex-wrap"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "font-medium text-stone-900"
+  }, p.category), /*#__PURE__*/React.createElement("span", {
+    className: "text-[10px] uppercase tracking-wider px-1.5 py-0.5 bg-stone-100 text-stone-600 rounded"
+  }, p.paymentMode), p.billNo && /*#__PURE__*/React.createElement("span", {
+    className: "text-xs text-stone-500"
+  }, "#", p.billNo)), /*#__PURE__*/React.createElement("div", {
+    className: "text-xs text-stone-500 mt-0.5"
+  }, formatDate(p.date), p.notes && /*#__PURE__*/React.createElement("span", null, " \xB7 ", p.notes))), /*#__PURE__*/React.createElement("div", {
+    className: "font-mono-num font-semibold text-stone-900"
+  }, formatINR(p.amount)), /*#__PURE__*/React.createElement("button", {
+    onClick: () => onDeletePurchase(p.id),
+    className: "opacity-0 group-hover:opacity-100 text-rose-600 hover:bg-rose-50 p-1 rounded transition",
+    title: "Delete"
+  }, /*#__PURE__*/React.createElement(Trash2, {
+    size: 14
+  })))))), /*#__PURE__*/React.createElement("section", {
+    className: "bg-white border border-stone-200 rounded-lg overflow-hidden mt-5"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "px-5 py-4 border-b border-stone-200 flex items-center justify-between"
+  }, /*#__PURE__*/React.createElement("h3", {
+    className: "font-display text-lg text-stone-900"
+  }, "Call history ", /*#__PURE__*/React.createElement("span", {
+    className: "text-stone-400 font-normal text-sm"
+  }, "(", sortedCalls.length, ")")), /*#__PURE__*/React.createElement("button", {
+    onClick: onLogCall,
+    className: "px-3 py-1.5 bg-stone-900 text-amber-50 rounded-md text-xs font-medium hover:bg-stone-800 inline-flex items-center gap-1.5"
+  }, /*#__PURE__*/React.createElement(Plus, {
+    size: 13
+  }), " Log call")), sortedCalls.length === 0 ? /*#__PURE__*/React.createElement("div", {
+    className: "px-5 py-10 text-center text-stone-500 text-sm"
+  }, "No calls logged yet. ", /*#__PURE__*/React.createElement("button", {
+    onClick: onLogCall,
+    className: "text-stone-900 underline"
+  }, "Log first call")) : /*#__PURE__*/React.createElement("ul", {
+    className: "divide-y divide-stone-100"
+  }, sortedCalls.map(call => {
+    const display = getCallDisplay(call);
+    const Icon = display?.icon || Phone;
+    const isPendingVideo = call.outcome === 'video_call' && !call.videoStatus;
+    return /*#__PURE__*/React.createElement("li", {
+      key: call.id,
+      className: "px-5 py-3.5 group"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "flex items-center gap-3"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: `h-10 w-10 rounded-md flex items-center justify-center shrink-0 ${display?.badge || 'bg-stone-100 text-stone-700'}`
+    }, /*#__PURE__*/React.createElement(Icon, {
+      size: 16
+    })), /*#__PURE__*/React.createElement("div", {
+      className: "flex-1 min-w-0"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "flex items-center gap-2 flex-wrap"
+    }, /*#__PURE__*/React.createElement("span", {
+      className: "font-medium text-stone-900"
+    }, display?.label || 'Call'), /*#__PURE__*/React.createElement("span", {
+      className: "text-xs text-stone-500"
+    }, formatDate(call.date))), (call.scheduledDate || call.notes) && /*#__PURE__*/React.createElement("div", {
+      className: "text-xs text-stone-500 mt-0.5"
+    }, call.scheduledDate && /*#__PURE__*/React.createElement("span", null, "Scheduled: ", formatDate(call.scheduledDate)), call.scheduledDate && call.notes && /*#__PURE__*/React.createElement("span", null, " \xB7 "), call.notes && /*#__PURE__*/React.createElement("span", null, call.notes))), /*#__PURE__*/React.createElement("button", {
+      onClick: () => onDeleteCall(call.id),
+      className: "opacity-0 group-hover:opacity-100 text-rose-600 hover:bg-rose-50 p-1 rounded transition",
+      title: "Delete"
+    }, /*#__PURE__*/React.createElement(Trash2, {
+      size: 14
+    }))), isPendingVideo && /*#__PURE__*/React.createElement("div", {
+      className: "ml-13 mt-2 pl-13 px-3 py-2 bg-amber-50 border border-amber-200 rounded-md"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "text-[11px] font-medium text-amber-900 mb-1.5 flex items-center gap-1.5"
+    }, /*#__PURE__*/React.createElement(Video, {
+      size: 12
+    }), " Video call done? Did they buy?"), /*#__PURE__*/React.createElement("div", {
+      className: "flex gap-1.5"
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: () => onUpdateCall(call.id, {
+        videoStatus: 'selected'
+      }),
+      className: "flex-1 py-1.5 text-xs font-medium rounded-md bg-emerald-600 text-white hover:bg-emerald-700 inline-flex items-center justify-center gap-1.5 transition"
+    }, /*#__PURE__*/React.createElement(Check, {
+      size: 12
+    }), " Yes, sold"), /*#__PURE__*/React.createElement("button", {
+      onClick: () => onUpdateCall(call.id, {
+        videoStatus: 'not_selected'
+      }),
+      className: "flex-1 py-1.5 text-xs font-medium rounded-md bg-white border border-rose-300 text-rose-700 hover:bg-rose-50 inline-flex items-center justify-center gap-1.5 transition"
+    }, /*#__PURE__*/React.createElement(X, {
+      size: 12
+    }), " No, didn't buy"))));
+  }))));
+}
+function Stat({
+  label,
+  value,
+  tiny
+}) {
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    className: "text-[10px] uppercase tracking-wider text-stone-500"
+  }, label), /*#__PURE__*/React.createElement("div", {
+    className: `font-semibold text-stone-900 font-mono-num ${tiny ? 'text-base' : 'text-2xl'}`
+  }, value));
+}
+
+// ============ ALL PURCHASES ============
+function AllPurchases({
+  purchases,
+  customers,
+  onOpenCustomer,
+  onDeletePurchase
+}) {
+  const cMap = useMemo(() => Object.fromEntries(customers.map(c => [c.id, c])), [customers]);
+  const [q, setQ] = useState('');
+  const [catFilter, setCatFilter] = useState('');
+  const [visibleCount, setVisibleCount] = useState(50);
+  useEffect(() => {
+    setVisibleCount(50);
+  }, [q, catFilter]);
+  const sorted = useMemo(() => {
+    const qn = q.trim().toLowerCase();
+    return [...purchases].filter(p => {
+      if (catFilter && p.category !== catFilter) return false;
+      if (!qn) return true;
+      const c = cMap[p.customerId];
+      return c && (c.name.toLowerCase().includes(qn) || normalizePhone(c.phone).includes(normalizePhone(q)));
+    }).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  }, [purchases, q, catFilter, cMap]);
+  const total = sorted.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    className: "flex items-end justify-between mb-4"
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    className: "text-xs uppercase tracking-[0.25em] text-stone-500"
+  }, "Records"), /*#__PURE__*/React.createElement("h1", {
+    className: "font-display text-3xl text-stone-900 mt-1"
+  }, "All sales")), /*#__PURE__*/React.createElement("div", {
+    className: "text-right"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "text-xs uppercase tracking-wider text-stone-500"
+  }, "Filtered total"), /*#__PURE__*/React.createElement("div", {
+    className: "font-display text-2xl font-semibold text-stone-900 font-mono-num"
+  }, formatINR(total)))), /*#__PURE__*/React.createElement("div", {
+    className: "space-y-3 mb-4"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "relative"
+  }, /*#__PURE__*/React.createElement(Search, {
+    size: 16,
+    className: "absolute left-3 top-1/2 -translate-y-1/2 text-stone-400"
+  }), /*#__PURE__*/React.createElement("input", {
+    value: q,
+    onChange: e => setQ(e.target.value),
+    placeholder: "Search customer...",
+    className: "w-full pl-9 pr-3 py-2.5 bg-white border border-stone-200 rounded-md text-sm focus:outline-none focus:border-stone-400"
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "flex gap-1.5 flex-wrap"
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => setCatFilter(''),
+    className: `text-xs px-2.5 py-1 rounded-full border ${catFilter === '' ? 'bg-stone-900 text-amber-50 border-stone-900' : 'bg-white text-stone-700 border-stone-200'}`
+  }, "All categories"), CATEGORIES.map(c => /*#__PURE__*/React.createElement("button", {
+    key: c,
+    onClick: () => setCatFilter(c === catFilter ? '' : c),
+    className: `text-xs px-2.5 py-1 rounded-full border ${catFilter === c ? 'bg-stone-900 text-amber-50 border-stone-900' : 'bg-white text-stone-700 border-stone-200 hover:border-stone-400'}`
+  }, c)))), sorted.length === 0 ? /*#__PURE__*/React.createElement("div", {
+    className: "bg-white border border-stone-200 rounded-lg py-12 text-center text-stone-500 text-sm"
+  }, "No sales records yet.") : /*#__PURE__*/React.createElement("div", {
+    className: "bg-white border border-stone-200 rounded-lg overflow-hidden"
+  }, /*#__PURE__*/React.createElement("ul", {
+    className: "divide-y divide-stone-100"
+  }, sorted.slice(0, visibleCount).map(p => {
+    const c = cMap[p.customerId];
+    return /*#__PURE__*/React.createElement("li", {
+      key: p.id,
+      className: "px-4 py-3 flex items-center gap-3 group"
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: () => c && onOpenCustomer(c.id),
+      className: "flex items-center gap-3 flex-1 min-w-0 text-left hover:bg-stone-50 rounded p-1 -m-1"
+    }, /*#__PURE__*/React.createElement(Avatar, {
+      name: c?.name || '?'
+    }), /*#__PURE__*/React.createElement("div", {
+      className: "flex-1 min-w-0"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "font-medium text-stone-900 truncate"
+    }, c?.name || 'Unknown customer'), /*#__PURE__*/React.createElement("div", {
+      className: "text-xs text-stone-500 flex items-center gap-1.5"
+    }, /*#__PURE__*/React.createElement("span", null, p.category), /*#__PURE__*/React.createElement("span", null, "\xB7"), /*#__PURE__*/React.createElement("span", null, p.paymentMode), p.billNo && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", null, "\xB7"), /*#__PURE__*/React.createElement("span", null, "#", p.billNo))))), /*#__PURE__*/React.createElement("div", {
+      className: "text-right shrink-0"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "font-mono-num font-semibold text-stone-900 text-sm"
+    }, formatINR(p.amount)), /*#__PURE__*/React.createElement("div", {
+      className: "text-[10px] text-stone-500"
+    }, formatDate(p.date))), /*#__PURE__*/React.createElement("button", {
+      onClick: () => onDeletePurchase(p.id),
+      className: "opacity-0 group-hover:opacity-100 text-rose-600 hover:bg-rose-50 p-1 rounded transition",
+      title: "Delete"
+    }, /*#__PURE__*/React.createElement(Trash2, {
+      size: 14
+    })));
+  })), sorted.length > visibleCount && /*#__PURE__*/React.createElement("div", {
+    className: "px-4 py-4 bg-stone-50 border-t border-stone-200 text-center"
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => setVisibleCount(c => c + 50),
+    className: "text-sm font-medium text-stone-700 hover:text-stone-900 inline-flex items-center gap-1.5"
+  }, "Show 50 more ", /*#__PURE__*/React.createElement(ChevronRight, {
+    size: 14
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "text-[10px] text-stone-400 mt-1"
+  }, "Showing ", visibleCount, " of ", sorted.length))));
+}
+
+// ============ LEADERBOARD ============
+function Leaderboard({
+  customers,
+  onOpenCustomer
+}) {
+  const [tab, setTab] = useState('spent');
+  const [limit, setLimit] = useState(10);
+  const list = useMemo(() => {
+    const onlyWithActivity = customers.filter(c => c.visits > 0);
+    if (tab === 'spent') return [...onlyWithActivity].sort((a, b) => b.totalSpent - a.totalSpent);
+    if (tab === 'visits') return [...onlyWithActivity].sort((a, b) => b.visits - a.visits);
+    return [...onlyWithActivity].sort((a, b) => (b.lastVisit || '').localeCompare(a.lastVisit || ''));
+  }, [customers, tab]);
+  const topN = list.slice(0, limit);
+  const tabs = [{
+    id: 'spent',
+    label: 'Top spenders',
+    icon: Award,
+    sub: 'By total amount'
+  }, {
+    id: 'visits',
+    label: 'Most loyal',
+    icon: Star,
+    sub: 'By visit count'
+  }, {
+    id: 'recent',
+    label: 'Most recent',
+    icon: Activity,
+    sub: 'By last visit'
+  }];
+  const valueOf = c => tab === 'spent' ? formatINR(c.totalSpent) : tab === 'visits' ? `${c.visits} visit${c.visits !== 1 ? 's' : ''}` : formatDate(c.lastVisit);
+  const subOf = c => tab === 'spent' ? `${c.visits} visit${c.visits !== 1 ? 's' : ''}` : tab === 'visits' ? formatINR(c.totalSpent) : `${c.daysSinceLastVisit}d ago`;
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    className: "mb-5"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "text-xs uppercase tracking-[0.25em] text-stone-500"
+  }, "Ranked"), /*#__PURE__*/React.createElement("h1", {
+    className: "font-display text-3xl text-stone-900 mt-1"
+  }, "Top customers")), /*#__PURE__*/React.createElement("div", {
+    className: "grid grid-cols-3 gap-2 mb-4"
+  }, tabs.map(t => {
+    const Icon = t.icon;
+    const active = tab === t.id;
+    return /*#__PURE__*/React.createElement("button", {
+      key: t.id,
+      onClick: () => setTab(t.id),
+      className: `p-3 rounded-lg border text-left transition ${active ? 'bg-stone-900 text-amber-50 border-stone-900' : 'bg-white border-stone-200 hover:border-stone-400'}`
+    }, /*#__PURE__*/React.createElement(Icon, {
+      size: 16,
+      className: active ? 'text-amber-300' : 'text-stone-500'
+    }), /*#__PURE__*/React.createElement("div", {
+      className: "font-display text-base md:text-lg mt-1 leading-tight"
+    }, t.label), /*#__PURE__*/React.createElement("div", {
+      className: `text-[10px] uppercase tracking-wider mt-0.5 ${active ? 'text-amber-200/80' : 'text-stone-500'}`
+    }, t.sub));
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center gap-2 mb-3"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "text-xs uppercase tracking-wider text-stone-500"
+  }, "Show:"), [10, 20, 50, list.length].filter((v, i, arr) => v > 0 && arr.indexOf(v) === i).map(n => /*#__PURE__*/React.createElement("button", {
+    key: n,
+    onClick: () => setLimit(n),
+    className: `text-xs px-2.5 py-1 rounded-full border ${limit === n ? 'bg-stone-900 text-amber-50 border-stone-900' : 'bg-white text-stone-700 border-stone-200'}`
+  }, n >= list.length ? `All (${list.length})` : `Top ${n}`))), topN.length === 0 ? /*#__PURE__*/React.createElement("div", {
+    className: "bg-white border border-stone-200 rounded-lg py-12 text-center text-stone-500 text-sm"
+  }, "No purchases recorded yet. Add some sales to see your top customers.") : /*#__PURE__*/React.createElement("div", {
+    className: "bg-white border border-stone-200 rounded-lg overflow-hidden"
+  }, /*#__PURE__*/React.createElement("ul", {
+    className: "divide-y divide-stone-100"
+  }, topN.map((c, i) => /*#__PURE__*/React.createElement("li", {
+    key: c.id
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => onOpenCustomer(c.id),
+    className: "w-full px-4 py-3 flex items-center gap-3 hover:bg-stone-50 text-left"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: `h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold font-mono-num shrink-0 ${i === 0 ? 'bg-amber-200 text-amber-900' : i === 1 ? 'bg-stone-300 text-stone-800' : i === 2 ? 'bg-orange-200 text-orange-900' : 'bg-stone-100 text-stone-600'}`
+  }, i + 1), /*#__PURE__*/React.createElement(Avatar, {
+    name: c.name
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "flex-1 min-w-0"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "font-medium text-stone-900 truncate"
+  }, c.name), /*#__PURE__*/React.createElement("div", {
+    className: "text-xs text-stone-500"
+  }, c.phone, " \xB7 ", subOf(c))), /*#__PURE__*/React.createElement("div", {
+    className: "text-right shrink-0"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "font-mono-num font-semibold text-stone-900"
+  }, valueOf(c)))))))));
+}
+
+// ============ CALLS VIEW ============
+function CallsView({
+  customers,
+  calls,
+  onAddCall,
+  onUpdateCall,
+  onOpenCustomer,
+  onOpenCallForm
+}) {
+  const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState('all');
+  const [visibleCount, setVisibleCount] = useState(50);
+
+  // Reset pagination when search/filter changes
+  useEffect(() => {
+    setVisibleCount(50);
+  }, [search, filter]);
+
+  // Build customer -> calls map (sorted, newest first)
+  const callsByCustomer = useMemo(() => {
+    const map = {};
+    calls.forEach(k => {
+      (map[k.customerId] = map[k.customerId] || []).push(k);
+    });
+    Object.values(map).forEach(arr => arr.sort((a, b) => b.createdAt - a.createdAt));
+    return map;
+  }, [calls]);
+  const todayYmd = today();
+
+  // Helper: latest call's "state" for filtering
+  const callState = c => {
+    const lc = callsByCustomer[c.id]?.[0];
+    if (!lc) return 'none';
+    if (lc.outcome === 'video_call') {
+      if (lc.videoStatus === 'selected') return 'video_selected';
+      if (lc.videoStatus === 'not_selected') return 'video_not_selected';
+      return 'video_pending';
+    }
+    return lc.outcome;
+  };
+
+  // Stats for the header
+  const stats = useMemo(() => {
+    const calledToday = calls.filter(k => k.date === todayYmd).length;
+    let willVisit = 0,
+      videoPending = 0,
+      sold = 0,
+      failed = 0,
+      noAns = 0;
+    customers.forEach(c => {
+      const st = callState(c);
+      if (st === 'visiting') willVisit++;else if (st === 'video_pending') videoPending++;else if (st === 'video_selected') sold++;else if (st === 'video_not_selected') failed++;else if (st === 'no_answer') noAns++;
+    });
+    return {
+      calledToday,
+      willVisit,
+      videoPending,
+      sold,
+      failed,
+      noAns
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [calls, customers, callsByCustomer, todayYmd]);
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const qPhone = normalizePhone(search);
+    let list = customers.filter(c => {
+      if (q) {
+        const hit = c.name.toLowerCase().includes(q) || qPhone && normalizePhone(c.phone).includes(qPhone);
+        if (!hit) return false;
+      }
+      const lc = callsByCustomer[c.id]?.[0];
+      // "All" = active queue: never-called OR cooldown elapsed
+      if (filter === 'all') return !lc || !isInCooldown(lc);
+      if (filter === 'not_called') return !lc;
+      if (filter === 'called_today') return lc && lc.date === todayYmd;
+      return callState(c) === filter;
+    });
+    list.sort((a, b) => b.totalSpent - a.totalSpent);
+    return list;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customers, search, filter, callsByCustomer, todayYmd]);
+  const quickLog = async (customerId, outcome) => {
+    await onAddCall({
+      customerId,
+      outcome,
+      date: todayYmd
+    });
+  };
+  const notCalledCount = customers.filter(c => !callsByCustomer[c.id]).length;
+  const activeQueueCount = customers.filter(c => {
+    const lc = callsByCustomer[c.id]?.[0];
+    return !lc || !isInCooldown(lc);
+  }).length;
+
+  // Filter chip definitions
+  const chips = [{
+    id: 'all',
+    label: 'All',
+    count: activeQueueCount
+  }, {
+    id: 'not_called',
+    label: 'Not called',
+    count: notCalledCount
+  }, {
+    id: 'called_today',
+    label: 'Today',
+    count: stats.calledToday
+  }, {
+    id: 'visiting',
+    label: 'Will Visit',
+    count: stats.willVisit
+  }, {
+    id: 'video_pending',
+    label: 'Video pending',
+    count: stats.videoPending
+  }, {
+    id: 'video_selected',
+    label: 'Sold ✓',
+    count: stats.sold
+  }, {
+    id: 'video_not_selected',
+    label: 'Failed ✗',
+    count: stats.failed
+  }, {
+    id: 'no_answer',
+    label: 'No Ans',
+    count: stats.noAns
+  }];
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    className: "mb-4"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "text-xs uppercase tracking-[0.25em] text-stone-500"
+  }, "Outreach"), /*#__PURE__*/React.createElement("h1", {
+    className: "font-display text-3xl text-stone-900 mt-1"
+  }, "Phone Calls")), activeQueueCount > 0 && filter !== 'all' && /*#__PURE__*/React.createElement("button", {
+    onClick: () => setFilter('all'),
+    className: "w-full bg-stone-900 text-amber-50 rounded-lg p-4 mb-4 flex items-center justify-between hover:bg-stone-800 transition text-left"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "min-w-0"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "text-[10px] uppercase tracking-[0.2em] text-amber-200/80"
+  }, "Active queue"), /*#__PURE__*/React.createElement("div", {
+    className: "font-display text-xl md:text-2xl font-semibold mt-0.5 truncate"
+  }, activeQueueCount.toLocaleString('en-IN'), " customers to call"), stats.calledToday > 0 && /*#__PURE__*/React.createElement("div", {
+    className: "text-xs text-amber-200/80 mt-0.5"
+  }, stats.calledToday, " done today \xB7 keep going")), /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center gap-1 text-sm font-medium bg-amber-200 text-stone-900 px-3 py-2 rounded-md shrink-0 ml-3"
+  }, "Start ", /*#__PURE__*/React.createElement(ChevronRight, {
+    size: 15
+  }))), /*#__PURE__*/React.createElement("div", {
+    className: "grid grid-cols-2 md:grid-cols-4 gap-3 mb-4"
+  }, /*#__PURE__*/React.createElement(StatCard, {
+    label: "Called today",
+    value: stats.calledToday,
+    icon: PhoneCall
+  }), /*#__PURE__*/React.createElement(StatCard, {
+    label: "Will visit",
+    value: stats.willVisit,
+    icon: Store
+  }), /*#__PURE__*/React.createElement(StatCard, {
+    label: "Video pending",
+    value: stats.videoPending,
+    icon: Video,
+    accent: stats.videoPending > 0 ? 'warn' : null
+  }), /*#__PURE__*/React.createElement(StatCard, {
+    label: "Sold \u2713",
+    value: stats.sold,
+    icon: Check
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "relative mb-3"
+  }, /*#__PURE__*/React.createElement(Search, {
+    size: 16,
+    className: "absolute left-3 top-1/2 -translate-y-1/2 text-stone-400"
+  }), /*#__PURE__*/React.createElement("input", {
+    value: search,
+    onChange: e => setSearch(e.target.value),
+    placeholder: "Search name or phone...",
+    className: "w-full pl-9 pr-3 py-2.5 bg-white border border-stone-200 rounded-md text-sm focus:outline-none focus:border-stone-400"
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "flex gap-1.5 flex-wrap mb-4"
+  }, chips.map(({
+    id,
+    label,
+    count
+  }) => /*#__PURE__*/React.createElement("button", {
+    key: id,
+    onClick: () => setFilter(id),
+    className: `text-xs px-2.5 py-1 rounded-full border whitespace-nowrap inline-flex items-center gap-1.5 ${filter === id ? 'bg-stone-900 text-amber-50 border-stone-900' : 'bg-white text-stone-700 border-stone-200 hover:border-stone-400'}`
+  }, label, count > 0 && /*#__PURE__*/React.createElement("span", {
+    className: `text-[10px] font-mono-num ${filter === id ? 'text-amber-200/80' : 'text-stone-500'}`
+  }, count)))), filtered.length === 0 ? /*#__PURE__*/React.createElement("div", {
+    className: "bg-white border border-stone-200 rounded-lg py-12 text-center text-stone-500 text-sm"
+  }, customers.length === 0 ? 'No customers yet.' : 'No customers match this filter.') : /*#__PURE__*/React.createElement("div", {
+    className: "bg-white border border-stone-200 rounded-lg overflow-hidden"
+  }, /*#__PURE__*/React.createElement("ul", {
+    className: "divide-y divide-stone-100"
+  }, filtered.slice(0, visibleCount).map(c => {
+    const lc = callsByCustomer[c.id]?.[0];
+    const display = getCallDisplay(lc);
+    const Icon = display?.icon;
+    const telLink = `tel:${phoneForLink(c.phone)}`;
+    const isPendingVideo = lc && lc.outcome === 'video_call' && !lc.videoStatus;
+    return /*#__PURE__*/React.createElement("li", {
+      key: c.id,
+      className: "px-4 py-3"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "flex items-center gap-3 mb-2"
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: () => onOpenCustomer(c.id),
+      className: "flex items-center gap-3 flex-1 min-w-0 text-left"
+    }, /*#__PURE__*/React.createElement(Avatar, {
+      name: c.name
+    }), /*#__PURE__*/React.createElement("div", {
+      className: "flex-1 min-w-0"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "font-medium text-stone-900 truncate"
+    }, c.name), /*#__PURE__*/React.createElement("div", {
+      className: "text-xs text-stone-500 flex items-center gap-1.5 flex-wrap"
+    }, /*#__PURE__*/React.createElement("span", null, c.phone), display && /*#__PURE__*/React.createElement("span", {
+      className: `inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] ${display.badge}`
+    }, Icon && /*#__PURE__*/React.createElement(Icon, {
+      size: 9
+    }), display.label, " \xB7 ", shortAgo(lc.date)), lc && isInCooldown(lc) && /*#__PURE__*/React.createElement("span", {
+      className: "text-[10px] text-stone-400"
+    }, "back in ", daysUntilBackInQueue(lc), "d"), !lc && c.totalSpent > 0 && /*#__PURE__*/React.createElement("span", {
+      className: "text-[10px] text-stone-400"
+    }, "\xB7 ", formatINR(c.totalSpent)))))), /*#__PURE__*/React.createElement("div", {
+      className: "flex gap-1.5"
+    }, /*#__PURE__*/React.createElement("a", {
+      href: telLink,
+      className: "flex-1 py-2 text-xs font-medium rounded-md bg-stone-900 text-amber-50 hover:bg-stone-800 flex items-center justify-center gap-1.5 transition"
+    }, /*#__PURE__*/React.createElement(Phone, {
+      size: 13
+    }), " Call"), /*#__PURE__*/React.createElement("button", {
+      onClick: () => quickLog(c.id, 'visiting'),
+      className: "flex-1 py-2 text-xs font-medium rounded-md border bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border-emerald-200 flex items-center justify-center gap-1.5 transition"
+    }, /*#__PURE__*/React.createElement(Store, {
+      size: 13
+    }), " Visit"), /*#__PURE__*/React.createElement("button", {
+      onClick: () => quickLog(c.id, 'video_call'),
+      className: "flex-1 py-2 text-xs font-medium rounded-md border bg-sky-50 text-sky-800 hover:bg-sky-100 border-sky-200 flex items-center justify-center gap-1.5 transition"
+    }, /*#__PURE__*/React.createElement(Video, {
+      size: 13
+    }), " Video"), /*#__PURE__*/React.createElement("button", {
+      onClick: () => quickLog(c.id, 'no_answer'),
+      className: "flex-1 py-2 text-xs font-medium rounded-md border bg-amber-50 text-amber-800 hover:bg-amber-100 border-amber-200 flex items-center justify-center gap-1.5 transition",
+      title: "No answer \u2014 retry in 3 days"
+    }, /*#__PURE__*/React.createElement(PhoneOff, {
+      size: 13
+    }), " No Ans"), /*#__PURE__*/React.createElement("button", {
+      onClick: () => onOpenCallForm(c),
+      className: "px-2.5 py-2 text-xs font-medium rounded-md border bg-white text-stone-700 hover:bg-stone-50 border-stone-200 transition",
+      title: "Add notes or scheduled date"
+    }, /*#__PURE__*/React.createElement(MoreVertical, {
+      size: 14
+    }))), isPendingVideo && /*#__PURE__*/React.createElement("div", {
+      className: "mt-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-md"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "text-[11px] font-medium text-amber-900 mb-1.5 flex items-center gap-1.5"
+    }, /*#__PURE__*/React.createElement(Video, {
+      size: 12
+    }), " Video call done? Did they buy?"), /*#__PURE__*/React.createElement("div", {
+      className: "flex gap-1.5"
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: () => onUpdateCall(lc.id, {
+        videoStatus: 'selected'
+      }),
+      className: "flex-1 py-1.5 text-xs font-medium rounded-md bg-emerald-600 text-white hover:bg-emerald-700 inline-flex items-center justify-center gap-1.5 transition"
+    }, /*#__PURE__*/React.createElement(Check, {
+      size: 12
+    }), " Yes, sold"), /*#__PURE__*/React.createElement("button", {
+      onClick: () => onUpdateCall(lc.id, {
+        videoStatus: 'not_selected'
+      }),
+      className: "flex-1 py-1.5 text-xs font-medium rounded-md bg-white border border-rose-300 text-rose-700 hover:bg-rose-50 inline-flex items-center justify-center gap-1.5 transition"
+    }, /*#__PURE__*/React.createElement(X, {
+      size: 12
+    }), " No, didn't buy"))));
+  })), filtered.length > visibleCount && /*#__PURE__*/React.createElement("div", {
+    className: "px-4 py-4 bg-stone-50 border-t border-stone-200 text-center"
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => setVisibleCount(c => c + 50),
+    className: "text-sm font-medium text-stone-700 hover:text-stone-900 inline-flex items-center gap-1.5"
+  }, "Show 50 more ", /*#__PURE__*/React.createElement(ChevronRight, {
+    size: 14
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "text-[10px] text-stone-400 mt-1"
+  }, "Showing ", visibleCount, " of ", filtered.length))));
+}
+
+// ============ SETTINGS ============
+function SettingsView({
+  customers,
+  purchases,
+  enriched,
+  onTriggerImport,
+  onLogout,
+  onClearAll
+}) {
+  const exportCustomers = () => {
+    const data = enriched.map(c => ({
+      Name: c.name,
+      Phone: c.phone,
+      Tags: (c.tags || []).join(', '),
+      Birthday: c.birthday || '',
+      Anniversary: c.anniversary || '',
+      'Total Spent': c.totalSpent,
+      Visits: c.visits,
+      'Last Visit': c.lastVisit || '',
+      'Avg Order': c.avgOrder,
+      Notes: c.notes || ''
+    }));
+    const ws = XLSX.utils.json_to_sheet(data);
+    ws['!cols'] = [{
+      wch: 22
+    }, {
+      wch: 14
+    }, {
+      wch: 20
+    }, {
+      wch: 12
+    }, {
+      wch: 12
+    }, {
+      wch: 13
+    }, {
+      wch: 8
+    }, {
+      wch: 12
+    }, {
+      wch: 12
+    }, {
+      wch: 30
+    }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Customers');
+    XLSX.writeFile(wb, 'pal_mens_wear_customers.xlsx');
+  };
+  const exportPurchases = () => {
+    const cMap = Object.fromEntries(customers.map(c => [c.id, c]));
+    const data = [...purchases].sort((a, b) => (b.date || '').localeCompare(a.date || '')).map(p => {
+      const c = cMap[p.customerId] || {};
+      return {
+        Date: p.date,
+        'Customer Name': c.name || '',
+        Phone: c.phone || '',
+        Amount: Number(p.amount) || 0,
+        Category: p.category,
+        'Payment Mode': p.paymentMode,
+        'Bill No': p.billNo || '',
+        Notes: p.notes || ''
+      };
+    });
+    const ws = XLSX.utils.json_to_sheet(data);
+    ws['!cols'] = [{
+      wch: 12
+    }, {
+      wch: 22
+    }, {
+      wch: 14
+    }, {
+      wch: 10
+    }, {
+      wch: 13
+    }, {
+      wch: 13
+    }, {
+      wch: 10
+    }, {
+      wch: 25
+    }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Sales');
+    XLSX.writeFile(wb, 'pal_mens_wear_sales.xlsx');
+  };
+  return /*#__PURE__*/React.createElement("div", {
+    className: "max-w-2xl"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "mb-5"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "text-xs uppercase tracking-[0.25em] text-stone-500"
+  }, "Manage"), /*#__PURE__*/React.createElement("h1", {
+    className: "font-display text-3xl text-stone-900 mt-1"
+  }, "Settings")), /*#__PURE__*/React.createElement("section", {
+    className: "bg-white border border-stone-200 rounded-lg p-5 mb-4"
+  }, /*#__PURE__*/React.createElement("h3", {
+    className: "font-display text-lg text-stone-900 mb-1"
+  }, "Import from Excel"), /*#__PURE__*/React.createElement("p", {
+    className: "text-sm text-stone-600 mb-2"
+  }, "Two formats are auto-detected:"), /*#__PURE__*/React.createElement("ul", {
+    className: "text-sm text-stone-600 mb-3 space-y-1 pl-1"
+  }, /*#__PURE__*/React.createElement("li", null, "\u2022 ", /*#__PURE__*/React.createElement("strong", null, "POS bill export"), " \u2014 your billing software export (BILL NO., BILL DATE, RCU NAME, RCU MOBILE NO., ITEM NAME, NET SALE VALUE, etc.). Customers and bills are extracted together."), /*#__PURE__*/React.createElement("li", null, "\u2022 ", /*#__PURE__*/React.createElement("strong", null, "Simple list"), " \u2014 just Name + Phone columns (optional: Birthday, Anniversary, Notes)")), /*#__PURE__*/React.createElement("p", {
+    className: "text-xs text-stone-500 mb-3"
+  }, "Duplicates (by phone or bill no.) are skipped \u2014 you can safely re-import the same file or a newer export with overlapping data."), /*#__PURE__*/React.createElement("button", {
+    onClick: onTriggerImport,
+    className: "px-4 py-2 bg-stone-900 text-amber-50 rounded-md text-sm font-medium hover:bg-stone-800 inline-flex items-center gap-2"
+  }, /*#__PURE__*/React.createElement(Upload, {
+    size: 15
+  }), " Choose Excel file"), /*#__PURE__*/React.createElement("details", {
+    className: "mt-3 text-xs text-stone-600"
+  }, /*#__PURE__*/React.createElement("summary", {
+    className: "cursor-pointer hover:text-stone-900 font-medium"
+  }, "Simple format example"), /*#__PURE__*/React.createElement("div", {
+    className: "mt-2 bg-stone-50 border border-stone-200 rounded p-3 text-[11px] space-y-2"
+  }, /*#__PURE__*/React.createElement("p", null, "First row must be headers:"), /*#__PURE__*/React.createElement("div", {
+    className: "overflow-x-auto"
+  }, /*#__PURE__*/React.createElement("table", {
+    className: "border-collapse"
+  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", {
+    className: "bg-stone-200"
+  }, /*#__PURE__*/React.createElement("th", {
+    className: "border border-stone-300 px-2 py-1 text-left"
+  }, "Name"), /*#__PURE__*/React.createElement("th", {
+    className: "border border-stone-300 px-2 py-1 text-left"
+  }, "Phone"), /*#__PURE__*/React.createElement("th", {
+    className: "border border-stone-300 px-2 py-1 text-left"
+  }, "Birthday"), /*#__PURE__*/React.createElement("th", {
+    className: "border border-stone-300 px-2 py-1 text-left"
+  }, "Anniversary"), /*#__PURE__*/React.createElement("th", {
+    className: "border border-stone-300 px-2 py-1 text-left"
+  }, "Notes"))), /*#__PURE__*/React.createElement("tbody", {
+    className: "bg-white"
+  }, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", {
+    className: "border border-stone-300 px-2 py-1"
+  }, "Rajesh Kumar"), /*#__PURE__*/React.createElement("td", {
+    className: "border border-stone-300 px-2 py-1"
+  }, "9876543210"), /*#__PURE__*/React.createElement("td", {
+    className: "border border-stone-300 px-2 py-1"
+  }, "15/03/1985"), /*#__PURE__*/React.createElement("td", {
+    className: "border border-stone-300 px-2 py-1"
+  }), /*#__PURE__*/React.createElement("td", {
+    className: "border border-stone-300 px-2 py-1"
+  }, "Cotton shirts")), /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", {
+    className: "border border-stone-300 px-2 py-1"
+  }, "Amit Singh"), /*#__PURE__*/React.createElement("td", {
+    className: "border border-stone-300 px-2 py-1"
+  }, "9988776655"), /*#__PURE__*/React.createElement("td", {
+    className: "border border-stone-300 px-2 py-1"
+  }), /*#__PURE__*/React.createElement("td", {
+    className: "border border-stone-300 px-2 py-1"
+  }, "01/12/2010"), /*#__PURE__*/React.createElement("td", {
+    className: "border border-stone-300 px-2 py-1"
+  }))))), /*#__PURE__*/React.createElement("p", null, "Only ", /*#__PURE__*/React.createElement("strong", null, "Name"), " and ", /*#__PURE__*/React.createElement("strong", null, "Phone"), " are required.")))), /*#__PURE__*/React.createElement("section", {
+    className: "bg-white border border-stone-200 rounded-lg p-5 mb-4"
+  }, /*#__PURE__*/React.createElement("h3", {
+    className: "font-display text-lg text-stone-900 mb-1"
+  }, "Export data"), /*#__PURE__*/React.createElement("p", {
+    className: "text-sm text-stone-600 mb-3"
+  }, "Download your data as Excel (.xlsx). Useful for backup or sharing with accountant."), /*#__PURE__*/React.createElement("div", {
+    className: "flex flex-wrap gap-2"
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: exportCustomers,
+    className: "px-3 py-2 bg-stone-50 border border-stone-200 rounded-md text-sm font-medium hover:bg-stone-100 inline-flex items-center gap-2"
+  }, /*#__PURE__*/React.createElement(Download, {
+    size: 14
+  }), " Customers (", customers.length, ")"), /*#__PURE__*/React.createElement("button", {
+    onClick: exportPurchases,
+    className: "px-3 py-2 bg-stone-50 border border-stone-200 rounded-md text-sm font-medium hover:bg-stone-100 inline-flex items-center gap-2"
+  }, /*#__PURE__*/React.createElement(Download, {
+    size: 14
+  }), " Sales (", purchases.length, ")"))), /*#__PURE__*/React.createElement("section", {
+    className: "bg-white border border-stone-200 rounded-lg p-5 mb-4"
+  }, /*#__PURE__*/React.createElement("h3", {
+    className: "font-display text-lg text-stone-900 mb-3"
+  }, "Storage"), /*#__PURE__*/React.createElement("div", {
+    className: "grid grid-cols-2 gap-3 text-sm"
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
+    className: "text-stone-500"
+  }, "Customers:"), " ", /*#__PURE__*/React.createElement("strong", null, customers.length)), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
+    className: "text-stone-500"
+  }, "Sales records:"), " ", /*#__PURE__*/React.createElement("strong", null, purchases.length))), /*#__PURE__*/React.createElement("p", {
+    className: "text-xs text-stone-500 mt-3"
+  }, "Data is saved permanently on this device, even after refresh.")), /*#__PURE__*/React.createElement(AccountSection, {
+    onLogout: onLogout
+  }), /*#__PURE__*/React.createElement("section", {
+    className: "bg-white border border-rose-200 rounded-lg p-5"
+  }, /*#__PURE__*/React.createElement("h3", {
+    className: "font-display text-lg text-rose-900 mb-1"
+  }, "Danger zone"), /*#__PURE__*/React.createElement("p", {
+    className: "text-sm text-stone-600 mb-3"
+  }, "Permanently delete all customers and sales. Cannot be undone."), /*#__PURE__*/React.createElement("button", {
+    onClick: onClearAll,
+    className: "px-4 py-2 bg-rose-600 text-white rounded-md text-sm font-medium hover:bg-rose-700 inline-flex items-center gap-2"
+  }, /*#__PURE__*/React.createElement(Trash2, {
+    size: 14
+  }), " Clear all data")));
+}
+
+// ============ MODALS ============
+function ModalShell({
+  title,
+  onClose,
+  children,
+  wide
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    className: "fixed inset-0 z-40 flex items-end md:items-center justify-center bg-stone-900/40 backdrop-blur-sm",
+    onClick: onClose
+  }, /*#__PURE__*/React.createElement("div", {
+    className: `bg-stone-50 w-full ${wide ? 'md:max-w-2xl' : 'md:max-w-md'} md:rounded-lg rounded-t-2xl border-t md:border border-stone-200 shadow-xl max-h-[90vh] flex flex-col`,
+    onClick: e => e.stopPropagation()
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "px-5 py-4 border-b border-stone-200 flex items-center justify-between shrink-0"
+  }, /*#__PURE__*/React.createElement("h2", {
+    className: "font-display text-xl text-stone-900"
+  }, title), /*#__PURE__*/React.createElement("button", {
+    onClick: onClose,
+    className: "h-8 w-8 rounded-md hover:bg-stone-200 flex items-center justify-center"
+  }, /*#__PURE__*/React.createElement(X, {
+    size: 18
+  }))), /*#__PURE__*/React.createElement("div", {
+    className: "overflow-y-auto scrollbar-thin px-5 py-4 flex-1"
+  }, children)));
+}
+function Field({
+  label,
+  children,
+  required
+}) {
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+    className: "block text-xs uppercase tracking-wider text-stone-600 mb-1"
+  }, label, required && /*#__PURE__*/React.createElement("span", {
+    className: "text-rose-600 ml-1"
+  }, "*")), children);
+}
+const inputCls = "w-full px-3 py-2 bg-white border border-stone-200 rounded-md text-sm focus:outline-none focus:border-stone-500";
+function CustomerFormModal({
+  mode,
+  customer,
+  onClose,
+  onSave
+}) {
+  const [form, setForm] = useState({
+    id: customer?.id || null,
+    name: customer?.name || '',
+    phone: customer?.phone || '',
+    birthday: customer?.birthday || '',
+    anniversary: customer?.anniversary || '',
+    notes: customer?.notes || '',
+    tags: customer?.tags || []
+  });
+  const toggleTag = t => {
+    setForm(f => ({
+      ...f,
+      tags: f.tags.includes(t) ? f.tags.filter(x => x !== t) : [...f.tags, t]
+    }));
+  };
+  return /*#__PURE__*/React.createElement(ModalShell, {
+    title: mode === 'edit' ? 'Edit customer' : 'New customer',
+    onClose: onClose
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "space-y-4"
+  }, /*#__PURE__*/React.createElement(Field, {
+    label: "Name",
+    required: true
+  }, /*#__PURE__*/React.createElement("input", {
+    autoFocus: true,
+    value: form.name,
+    onChange: e => setForm({
+      ...form,
+      name: e.target.value
+    }),
+    className: inputCls,
+    placeholder: "e.g. Rajesh Kumar"
+  })), /*#__PURE__*/React.createElement(Field, {
+    label: "Phone",
+    required: true
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "tel",
+    value: form.phone,
+    onChange: e => setForm({
+      ...form,
+      phone: e.target.value
+    }),
+    className: inputCls,
+    placeholder: "10-digit number"
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "grid grid-cols-2 gap-3"
+  }, /*#__PURE__*/React.createElement(Field, {
+    label: "Birthday"
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "date",
+    value: form.birthday,
+    onChange: e => setForm({
+      ...form,
+      birthday: e.target.value
+    }),
+    className: inputCls
+  })), /*#__PURE__*/React.createElement(Field, {
+    label: "Anniversary"
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "date",
+    value: form.anniversary,
+    onChange: e => setForm({
+      ...form,
+      anniversary: e.target.value
+    }),
+    className: inputCls
+  }))), /*#__PURE__*/React.createElement(Field, {
+    label: "Tags"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex gap-1.5 flex-wrap"
+  }, AVAILABLE_TAGS.map(t => {
+    const on = form.tags.includes(t);
+    return /*#__PURE__*/React.createElement("button", {
+      key: t,
+      type: "button",
+      onClick: () => toggleTag(t),
+      className: `text-xs px-2.5 py-1 rounded-full border ${on ? 'bg-stone-900 text-amber-50 border-stone-900' : `${TAG_COLORS[t]} opacity-70 hover:opacity-100`}`
+    }, t);
+  }))), /*#__PURE__*/React.createElement(Field, {
+    label: "Notes"
+  }, /*#__PURE__*/React.createElement("textarea", {
+    rows: 2,
+    value: form.notes,
+    onChange: e => setForm({
+      ...form,
+      notes: e.target.value
+    }),
+    className: inputCls,
+    placeholder: "Any preferences, size info, etc."
+  }))), /*#__PURE__*/React.createElement("div", {
+    className: "flex gap-2 mt-6 pt-4 border-t border-stone-200"
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: onClose,
+    className: "flex-1 py-2.5 bg-white border border-stone-200 rounded-md text-sm font-medium hover:bg-stone-50"
+  }, "Cancel"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => onSave(form),
+    className: "flex-1 py-2.5 bg-stone-900 text-amber-50 rounded-md text-sm font-medium hover:bg-stone-800 inline-flex items-center justify-center gap-2"
+  }, /*#__PURE__*/React.createElement(Check, {
+    size: 15
+  }), " Save")));
+}
+function PurchaseFormModal({
+  customer,
+  onClose,
+  onSave
+}) {
+  const [form, setForm] = useState({
+    customerId: customer?.id || null,
+    date: today(),
+    amount: '',
+    category: 'Shirt',
+    paymentMode: 'Cash',
+    billNo: '',
+    notes: ''
+  });
+  return /*#__PURE__*/React.createElement(ModalShell, {
+    title: "Add sale",
+    onClose: onClose
+  }, customer && /*#__PURE__*/React.createElement("div", {
+    className: "bg-stone-100 rounded-md p-3 mb-4 flex items-center gap-3"
+  }, /*#__PURE__*/React.createElement(Avatar, {
+    name: customer.name
+  }), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    className: "font-medium text-stone-900"
+  }, customer.name), /*#__PURE__*/React.createElement("div", {
+    className: "text-xs text-stone-600"
+  }, customer.phone))), /*#__PURE__*/React.createElement("div", {
+    className: "space-y-4"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "grid grid-cols-2 gap-3"
+  }, /*#__PURE__*/React.createElement(Field, {
+    label: "Amount (\u20B9)",
+    required: true
+  }, /*#__PURE__*/React.createElement("input", {
+    autoFocus: true,
+    type: "number",
+    inputMode: "decimal",
+    value: form.amount,
+    onChange: e => setForm({
+      ...form,
+      amount: e.target.value
+    }),
+    className: inputCls,
+    placeholder: "0"
+  })), /*#__PURE__*/React.createElement(Field, {
+    label: "Date",
+    required: true
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "date",
+    value: form.date,
+    onChange: e => setForm({
+      ...form,
+      date: e.target.value
+    }),
+    className: inputCls
+  }))), /*#__PURE__*/React.createElement(Field, {
+    label: "Category"
+  }, /*#__PURE__*/React.createElement("select", {
+    value: form.category,
+    onChange: e => setForm({
+      ...form,
+      category: e.target.value
+    }),
+    className: inputCls
+  }, CATEGORIES.map(c => /*#__PURE__*/React.createElement("option", {
+    key: c
+  }, c)))), /*#__PURE__*/React.createElement(Field, {
+    label: "Payment mode"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex gap-1.5"
+  }, PAYMENT_MODES.map(p => /*#__PURE__*/React.createElement("button", {
+    key: p,
+    type: "button",
+    onClick: () => setForm({
+      ...form,
+      paymentMode: p
+    }),
+    className: `flex-1 text-sm px-3 py-2 rounded-md border ${form.paymentMode === p ? 'bg-stone-900 text-amber-50 border-stone-900' : 'bg-white text-stone-700 border-stone-200'}`
+  }, p)))), /*#__PURE__*/React.createElement("div", {
+    className: "grid grid-cols-2 gap-3"
+  }, /*#__PURE__*/React.createElement(Field, {
+    label: "Bill no."
+  }, /*#__PURE__*/React.createElement("input", {
+    value: form.billNo,
+    onChange: e => setForm({
+      ...form,
+      billNo: e.target.value
+    }),
+    className: inputCls,
+    placeholder: "optional"
+  }))), /*#__PURE__*/React.createElement(Field, {
+    label: "Notes"
+  }, /*#__PURE__*/React.createElement("input", {
+    value: form.notes,
+    onChange: e => setForm({
+      ...form,
+      notes: e.target.value
+    }),
+    className: inputCls,
+    placeholder: "e.g. wedding, alteration done"
+  }))), /*#__PURE__*/React.createElement("div", {
+    className: "flex gap-2 mt-6 pt-4 border-t border-stone-200"
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: onClose,
+    className: "flex-1 py-2.5 bg-white border border-stone-200 rounded-md text-sm font-medium hover:bg-stone-50"
+  }, "Cancel"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => onSave(form),
+    className: "flex-1 py-2.5 bg-stone-900 text-amber-50 rounded-md text-sm font-medium hover:bg-stone-800 inline-flex items-center justify-center gap-2"
+  }, /*#__PURE__*/React.createElement(Check, {
+    size: 15
+  }), " Save sale")));
+}
+function QuickAddModal({
+  customers,
+  onClose,
+  onNeedNewCustomer,
+  onAddPurchase
+}) {
+  const [phone, setPhone] = useState('');
+  const [selected, setSelected] = useState(null);
+  const [form, setForm] = useState({
+    amount: '',
+    category: 'Shirt',
+    paymentMode: 'Cash',
+    billNo: '',
+    notes: '',
+    date: today()
+  });
+  const matches = useMemo(() => {
+    const q = normalizePhone(phone);
+    if (!q) return [];
+    return customers.filter(c => normalizePhone(c.phone).includes(q) || c.name.toLowerCase().includes(phone.toLowerCase())).slice(0, 5);
+  }, [phone, customers]);
+  return /*#__PURE__*/React.createElement(ModalShell, {
+    title: "Quick add purchase",
+    onClose: onClose
+  }, !selected ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(Field, {
+    label: "Customer phone or name",
+    required: true
+  }, /*#__PURE__*/React.createElement("input", {
+    autoFocus: true,
+    value: phone,
+    onChange: e => setPhone(e.target.value),
+    className: inputCls,
+    placeholder: "Type phone number or name..."
+  })), phone && /*#__PURE__*/React.createElement("div", {
+    className: "mt-3 border border-stone-200 rounded-md bg-white overflow-hidden"
+  }, matches.length > 0 ? /*#__PURE__*/React.createElement("ul", {
+    className: "divide-y divide-stone-100"
+  }, matches.map(c => /*#__PURE__*/React.createElement("li", {
+    key: c.id
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => setSelected(c),
+    className: "w-full px-3 py-2.5 flex items-center gap-3 hover:bg-stone-50 text-left"
+  }, /*#__PURE__*/React.createElement(Avatar, {
+    name: c.name
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "flex-1 min-w-0"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "font-medium text-stone-900 truncate"
+  }, c.name), /*#__PURE__*/React.createElement("div", {
+    className: "text-xs text-stone-500"
+  }, c.phone, " \xB7 ", c.visits, " visit", c.visits !== 1 ? 's' : '')), /*#__PURE__*/React.createElement("div", {
+    className: "text-xs font-mono-num text-stone-700"
+  }, formatINR(c.totalSpent)))))) : /*#__PURE__*/React.createElement("div", {
+    className: "p-4 text-center"
+  }, /*#__PURE__*/React.createElement("p", {
+    className: "text-sm text-stone-600 mb-2"
+  }, "No match found."), /*#__PURE__*/React.createElement("button", {
+    onClick: () => onNeedNewCustomer(phone),
+    className: "px-3 py-1.5 bg-stone-900 text-amber-50 rounded-md text-sm font-medium hover:bg-stone-800 inline-flex items-center gap-1.5"
+  }, /*#__PURE__*/React.createElement(Plus, {
+    size: 13
+  }), " Create new customer")))) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    className: "bg-stone-100 rounded-md p-3 mb-4 flex items-center gap-3"
+  }, /*#__PURE__*/React.createElement(Avatar, {
+    name: selected.name
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "flex-1 min-w-0"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "font-medium text-stone-900"
+  }, selected.name), /*#__PURE__*/React.createElement("div", {
+    className: "text-xs text-stone-600"
+  }, selected.phone)), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setSelected(null),
+    className: "text-xs text-stone-600 underline"
+  }, "Change")), /*#__PURE__*/React.createElement("div", {
+    className: "space-y-4"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "grid grid-cols-2 gap-3"
+  }, /*#__PURE__*/React.createElement(Field, {
+    label: "Amount (\u20B9)",
+    required: true
+  }, /*#__PURE__*/React.createElement("input", {
+    autoFocus: true,
+    type: "number",
+    inputMode: "decimal",
+    value: form.amount,
+    onChange: e => setForm({
+      ...form,
+      amount: e.target.value
+    }),
+    className: inputCls,
+    placeholder: "0"
+  })), /*#__PURE__*/React.createElement(Field, {
+    label: "Date"
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "date",
+    value: form.date,
+    onChange: e => setForm({
+      ...form,
+      date: e.target.value
+    }),
+    className: inputCls
+  }))), /*#__PURE__*/React.createElement(Field, {
+    label: "Category"
+  }, /*#__PURE__*/React.createElement("select", {
+    value: form.category,
+    onChange: e => setForm({
+      ...form,
+      category: e.target.value
+    }),
+    className: inputCls
+  }, CATEGORIES.map(c => /*#__PURE__*/React.createElement("option", {
+    key: c
+  }, c)))), /*#__PURE__*/React.createElement(Field, {
+    label: "Payment"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex gap-1.5"
+  }, PAYMENT_MODES.map(p => /*#__PURE__*/React.createElement("button", {
+    key: p,
+    type: "button",
+    onClick: () => setForm({
+      ...form,
+      paymentMode: p
+    }),
+    className: `flex-1 text-sm px-3 py-2 rounded-md border ${form.paymentMode === p ? 'bg-stone-900 text-amber-50 border-stone-900' : 'bg-white text-stone-700 border-stone-200'}`
+  }, p)))), /*#__PURE__*/React.createElement("div", {
+    className: "grid grid-cols-2 gap-3"
+  }, /*#__PURE__*/React.createElement(Field, {
+    label: "Bill no."
+  }, /*#__PURE__*/React.createElement("input", {
+    value: form.billNo,
+    onChange: e => setForm({
+      ...form,
+      billNo: e.target.value
+    }),
+    className: inputCls,
+    placeholder: "optional"
+  })))), /*#__PURE__*/React.createElement("div", {
+    className: "flex gap-2 mt-6 pt-4 border-t border-stone-200"
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: onClose,
+    className: "flex-1 py-2.5 bg-white border border-stone-200 rounded-md text-sm font-medium hover:bg-stone-50"
+  }, "Cancel"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => onAddPurchase({
+      ...form,
+      customerId: selected.id
+    }),
+    className: "flex-1 py-2.5 bg-stone-900 text-amber-50 rounded-md text-sm font-medium hover:bg-stone-800 inline-flex items-center justify-center gap-2"
+  }, /*#__PURE__*/React.createElement(Check, {
+    size: 15
+  }), " Add sale"))));
+}
+function ConfirmModal({
+  title,
+  message,
+  confirmLabel = 'Delete',
+  onConfirm,
+  onClose
+}) {
+  return /*#__PURE__*/React.createElement(ModalShell, {
+    title: title,
+    onClose: onClose
+  }, /*#__PURE__*/React.createElement("p", {
+    className: "text-sm text-stone-700"
+  }, message), /*#__PURE__*/React.createElement("div", {
+    className: "flex gap-2 mt-6"
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: onClose,
+    className: "flex-1 py-2.5 bg-white border border-stone-200 rounded-md text-sm font-medium hover:bg-stone-50"
+  }, "Cancel"), /*#__PURE__*/React.createElement("button", {
+    onClick: onConfirm,
+    className: "flex-1 py-2.5 bg-rose-600 text-white rounded-md text-sm font-medium hover:bg-rose-700"
+  }, confirmLabel)));
+}
+function CallFormModal({
+  customer,
+  onClose,
+  onSave
+}) {
+  const [form, setForm] = useState({
+    date: today(),
+    outcome: 'visiting',
+    scheduledDate: '',
+    notes: ''
+  });
+  const showScheduled = form.outcome === 'visiting' || form.outcome === 'video_call';
+  const scheduledLabel = form.outcome === 'video_call' ? 'Video call on' : 'Coming on';
+  return /*#__PURE__*/React.createElement(ModalShell, {
+    title: "Log call",
+    onClose: onClose
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "bg-stone-100 rounded-md p-3 mb-4 flex items-center gap-3"
+  }, /*#__PURE__*/React.createElement(Avatar, {
+    name: customer.name
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "flex-1 min-w-0"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "font-medium text-stone-900 truncate"
+  }, customer.name), /*#__PURE__*/React.createElement("div", {
+    className: "text-xs text-stone-600"
+  }, customer.phone)), /*#__PURE__*/React.createElement("a", {
+    href: `tel:${phoneForLink(customer.phone)}`,
+    className: "h-9 w-9 rounded-md bg-stone-900 text-amber-50 hover:bg-stone-800 flex items-center justify-center",
+    title: "Call now"
+  }, /*#__PURE__*/React.createElement(Phone, {
+    size: 15
+  }))), /*#__PURE__*/React.createElement("div", {
+    className: "space-y-4"
+  }, /*#__PURE__*/React.createElement(Field, {
+    label: "What did they say?",
+    required: true
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "space-y-1.5"
+  }, CALL_OUTCOMES.map(o => {
+    const Icon = o.icon;
+    const on = form.outcome === o.id;
+    return /*#__PURE__*/React.createElement("button", {
+      key: o.id,
+      type: "button",
+      onClick: () => setForm({
+        ...form,
+        outcome: o.id
+      }),
+      className: `w-full px-3 py-2 rounded-md border text-sm font-medium flex items-center gap-2 transition ${on ? OUTCOME_BTN[o.id] + ' ring-2 ring-stone-900/10' : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-50'}`
+    }, /*#__PURE__*/React.createElement(Icon, {
+      size: 15
+    }), o.label, on && /*#__PURE__*/React.createElement(Check, {
+      size: 14,
+      className: "ml-auto"
+    }));
+  })), /*#__PURE__*/React.createElement("p", {
+    className: "text-[11px] text-stone-500 mt-2"
+  }, "If customer wasn't interested, just leave this \u2014 they'll stay in your queue for retry later.")), /*#__PURE__*/React.createElement("div", {
+    className: "grid grid-cols-2 gap-3"
+  }, /*#__PURE__*/React.createElement(Field, {
+    label: "Call date"
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "date",
+    value: form.date,
+    onChange: e => setForm({
+      ...form,
+      date: e.target.value
+    }),
+    className: inputCls
+  })), showScheduled && /*#__PURE__*/React.createElement(Field, {
+    label: scheduledLabel
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "date",
+    value: form.scheduledDate,
+    onChange: e => setForm({
+      ...form,
+      scheduledDate: e.target.value
+    }),
+    className: inputCls
+  }))), /*#__PURE__*/React.createElement(Field, {
+    label: "Notes"
+  }, /*#__PURE__*/React.createElement("textarea", {
+    rows: 2,
+    value: form.notes,
+    onChange: e => setForm({
+      ...form,
+      notes: e.target.value
+    }),
+    className: inputCls,
+    placeholder: "e.g. Coming Saturday with brother, looking for sherwani"
+  }))), /*#__PURE__*/React.createElement("div", {
+    className: "flex gap-2 mt-6 pt-4 border-t border-stone-200"
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: onClose,
+    className: "flex-1 py-2.5 bg-white border border-stone-200 rounded-md text-sm font-medium hover:bg-stone-50"
+  }, "Cancel"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => onSave(form),
+    className: "flex-1 py-2.5 bg-stone-900 text-amber-50 rounded-md text-sm font-medium hover:bg-stone-800 inline-flex items-center justify-center gap-2"
+  }, /*#__PURE__*/React.createElement(Check, {
+    size: 15
+  }), " Save")));
+}
+
+// Decide what to render: config screen if no Supabase set up, else the App
+const RootComponent = _supabase ? App : ConfigScreen;
+createRoot(document.getElementById('root')).render(React.createElement(RootComponent));
+</script>
+
+</body>
+</html>
