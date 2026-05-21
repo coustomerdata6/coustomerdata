@@ -433,6 +433,16 @@ const CALL_OUTCOMES = [{
   shortLabel: 'Video',
   icon: Video
 }, {
+  id: 'not_confirm',
+  label: 'Not Confirmed Yet',
+  shortLabel: 'Not Conf',
+  icon: AlertCircle
+}, {
+  id: 'busy',
+  label: 'Busy - Call Later',
+  shortLabel: 'Busy',
+  icon: Clock
+}, {
   id: 'no_answer',
   label: 'No Answer',
   shortLabel: 'No Ans',
@@ -441,11 +451,15 @@ const CALL_OUTCOMES = [{
 const OUTCOME_BADGE = {
   visiting: 'bg-emerald-100 text-emerald-900 border border-emerald-300',
   video_call: 'bg-sky-100 text-sky-900 border border-sky-300',
+  not_confirm: 'bg-violet-100 text-violet-900 border border-violet-300',
+  busy: 'bg-orange-100 text-orange-900 border border-orange-300',
   no_answer: 'bg-amber-100 text-amber-900 border border-amber-300'
 };
 const OUTCOME_BTN = {
   visiting: 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border-emerald-200',
   video_call: 'bg-sky-50 text-sky-800 hover:bg-sky-100 border-sky-200',
+  not_confirm: 'bg-violet-50 text-violet-800 hover:bg-violet-100 border-violet-200',
+  busy: 'bg-orange-50 text-orange-800 hover:bg-orange-100 border-orange-200',
   no_answer: 'bg-amber-50 text-amber-800 hover:bg-amber-100 border-amber-200'
 };
 
@@ -497,6 +511,10 @@ const COOLDOWN_DAYS = {
   // Sold — treat like a regular post-sale customer
   video_not_selected: 30,
   // Video failed — retry after a month
+  not_confirm: 5,
+  // Customer needs time to decide — retry after a few days
+  busy: 1,
+  // Customer was busy, call back tomorrow
   no_answer: 3 // Quick retry if they didn't pick up
 };
 const callCooldownDays = call => {
@@ -2548,10 +2566,12 @@ function CallsView({
       videoPending = 0,
       sold = 0,
       failed = 0,
-      noAns = 0;
+      noAns = 0,
+      notConfirm = 0,
+      busy = 0;
     customers.forEach(c => {
       const st = callState(c);
-      if (st === 'visiting') willVisit++;else if (st === 'video_pending') videoPending++;else if (st === 'video_selected') sold++;else if (st === 'video_not_selected') failed++;else if (st === 'no_answer') noAns++;
+      if (st === 'visiting') willVisit++;else if (st === 'video_pending') videoPending++;else if (st === 'video_selected') sold++;else if (st === 'video_not_selected') failed++;else if (st === 'no_answer') noAns++;else if (st === 'not_confirm') notConfirm++;else if (st === 'busy') busy++;
     });
     return {
       calledToday,
@@ -2559,7 +2579,9 @@ function CallsView({
       videoPending,
       sold,
       failed,
-      noAns
+      noAns,
+      notConfirm,
+      busy
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [calls, customers, callsByCustomer, todayYmd]);
@@ -2632,6 +2654,14 @@ function CallsView({
     id: 'video_not_selected',
     label: 'Failed ✗',
     count: stats.failed
+  }, {
+    id: 'not_confirm',
+    label: 'Not Confirm',
+    count: stats.notConfirm
+  }, {
+    id: 'busy',
+    label: 'Busy',
+    count: stats.busy
   }, {
     id: 'no_answer',
     label: 'No Ans',
@@ -2736,16 +2766,16 @@ function CallsView({
     }, "back in ", daysUntilBackInQueue(lc), "d"), !lc && c.totalSpent > 0 && /*#__PURE__*/React.createElement("span", {
       className: "text-[10px] text-stone-400"
     }, "\xB7 ", formatINR(c.totalSpent)))))), /*#__PURE__*/React.createElement("div", {
-      className: "flex gap-1.5"
+      className: "flex flex-wrap gap-1.5"
     }, /*#__PURE__*/React.createElement("a", {
       href: telLink,
-      className: "flex-1 py-2 text-xs font-medium rounded-md bg-stone-900 text-amber-50 hover:bg-stone-800 flex items-center justify-center gap-1.5 transition"
+      className: "flex-1 min-w-[70px] py-2 text-xs font-medium rounded-md bg-stone-900 text-amber-50 hover:bg-stone-800 flex items-center justify-center gap-1.5 transition"
     }, /*#__PURE__*/React.createElement(Phone, {
       size: 13
     }), " Call"), /*#__PURE__*/React.createElement("button", {
       onClick: () => quickLog(c.id, 'visiting'),
       disabled: savingKey === c.id + '|visiting',
-      className: "flex-1 py-2 text-xs font-medium rounded-md border bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border-emerald-200 flex items-center justify-center gap-1.5 transition disabled:opacity-50 disabled:cursor-not-allowed"
+      className: "flex-1 min-w-[70px] py-2 text-xs font-medium rounded-md border bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border-emerald-200 flex items-center justify-center gap-1.5 transition disabled:opacity-50 disabled:cursor-not-allowed"
     }, savingKey === c.id + '|visiting' ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
       className: "inline-block h-3 w-3 border-2 border-emerald-700 border-t-transparent rounded-full animate-spin"
     }), " Saving") : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(Store, {
@@ -2753,15 +2783,33 @@ function CallsView({
     }), " Visit")), /*#__PURE__*/React.createElement("button", {
       onClick: () => quickLog(c.id, 'video_call'),
       disabled: savingKey === c.id + '|video_call',
-      className: "flex-1 py-2 text-xs font-medium rounded-md border bg-sky-50 text-sky-800 hover:bg-sky-100 border-sky-200 flex items-center justify-center gap-1.5 transition disabled:opacity-50 disabled:cursor-not-allowed"
+      className: "flex-1 min-w-[70px] py-2 text-xs font-medium rounded-md border bg-sky-50 text-sky-800 hover:bg-sky-100 border-sky-200 flex items-center justify-center gap-1.5 transition disabled:opacity-50 disabled:cursor-not-allowed"
     }, savingKey === c.id + '|video_call' ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
       className: "inline-block h-3 w-3 border-2 border-sky-700 border-t-transparent rounded-full animate-spin"
     }), " Saving") : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(Video, {
       size: 13
     }), " Video")), /*#__PURE__*/React.createElement("button", {
+      onClick: () => quickLog(c.id, 'not_confirm'),
+      disabled: savingKey === c.id + '|not_confirm',
+      className: "flex-1 min-w-[80px] py-2 text-xs font-medium rounded-md border bg-violet-50 text-violet-800 hover:bg-violet-100 border-violet-200 flex items-center justify-center gap-1.5 transition disabled:opacity-50 disabled:cursor-not-allowed",
+      title: "Not yet confirmed \u2014 retry in 5 days"
+    }, savingKey === c.id + '|not_confirm' ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
+      className: "inline-block h-3 w-3 border-2 border-violet-700 border-t-transparent rounded-full animate-spin"
+    }), " Saving") : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(AlertCircle, {
+      size: 13
+    }), " Not Conf")), /*#__PURE__*/React.createElement("button", {
+      onClick: () => quickLog(c.id, 'busy'),
+      disabled: savingKey === c.id + '|busy',
+      className: "flex-1 min-w-[70px] py-2 text-xs font-medium rounded-md border bg-orange-50 text-orange-800 hover:bg-orange-100 border-orange-200 flex items-center justify-center gap-1.5 transition disabled:opacity-50 disabled:cursor-not-allowed",
+      title: "Customer busy \u2014 call back tomorrow"
+    }, savingKey === c.id + '|busy' ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
+      className: "inline-block h-3 w-3 border-2 border-orange-700 border-t-transparent rounded-full animate-spin"
+    }), " Saving") : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(Clock, {
+      size: 13
+    }), " Busy")), /*#__PURE__*/React.createElement("button", {
       onClick: () => quickLog(c.id, 'no_answer'),
       disabled: savingKey === c.id + '|no_answer',
-      className: "flex-1 py-2 text-xs font-medium rounded-md border bg-amber-50 text-amber-800 hover:bg-amber-100 border-amber-200 flex items-center justify-center gap-1.5 transition disabled:opacity-50 disabled:cursor-not-allowed",
+      className: "flex-1 min-w-[70px] py-2 text-xs font-medium rounded-md border bg-amber-50 text-amber-800 hover:bg-amber-100 border-amber-200 flex items-center justify-center gap-1.5 transition disabled:opacity-50 disabled:cursor-not-allowed",
       title: "No answer \u2014 retry in 3 days"
     }, savingKey === c.id + '|no_answer' ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
       className: "inline-block h-3 w-3 border-2 border-amber-700 border-t-transparent rounded-full animate-spin"
