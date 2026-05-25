@@ -2527,6 +2527,8 @@ function CallsView({
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
   const [visibleCount, setVisibleCount] = useState(50);
+  const [viewMode, setViewMode] = useState('customers'); // 'customers' or 'days'
+  const [expandedDay, setExpandedDay] = useState(null); // which day is expanded in day view
   const searchDebounced = useDebouncedValue(search, 150);
   // Track which (customer + outcome) is currently saving — prevents duplicate clicks
   const [savingKey, setSavingKey] = useState(null);
@@ -2535,6 +2537,15 @@ function CallsView({
   useEffect(() => {
     setVisibleCount(50);
   }, [searchDebounced, filter]);
+
+  // Customer lookup for day view
+  const customersById = useMemo(() => {
+    const map = {};
+    customers.forEach(c => {
+      map[c.id] = c;
+    });
+    return map;
+  }, [customers]);
 
   // Build customer -> calls map (sorted, newest first)
   const callsByCustomer = useMemo(() => {
@@ -2625,6 +2636,58 @@ function CallsView({
     return !lc || !isInCooldown(lc);
   }).length;
 
+  // Day-wise grouping for "Day View"
+  const dayGroups = useMemo(() => {
+    const map = {}; // ymd -> { ymd, calls[], counts: {visiting, video_call, not_confirm, busy, no_answer, total} }
+    calls.forEach(k => {
+      let ymd = k.date;
+      if (!ymd && k.createdAt) {
+        const d = new Date(k.createdAt);
+        ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      }
+      if (!ymd) return; // skip if can't determine date
+      if (!map[ymd]) {
+        map[ymd] = {
+          ymd,
+          calls: [],
+          counts: {
+            visiting: 0,
+            video_call: 0,
+            not_confirm: 0,
+            busy: 0,
+            no_answer: 0,
+            total: 0
+          }
+        };
+      }
+      map[ymd].calls.push(k);
+      map[ymd].counts.total++;
+      if (k.outcome in map[ymd].counts) map[ymd].counts[k.outcome]++;
+    });
+    // Sort each day's calls by time (newest first)
+    Object.values(map).forEach(g => g.calls.sort((a, b) => b.createdAt - a.createdAt));
+    // Return as array sorted newest day first
+    return Object.values(map).sort((a, b) => b.ymd.localeCompare(a.ymd));
+  }, [calls]);
+
+  // Filtered day groups (when search is active in day view)
+  const filteredDayGroups = useMemo(() => {
+    if (!searchDebounced.trim()) return dayGroups;
+    const q = searchDebounced.toLowerCase().trim();
+    return dayGroups.map(g => {
+      const matchingCalls = g.calls.filter(k => {
+        const cust = customersById[k.customerId];
+        if (!cust) return false;
+        return (cust.name || '').toLowerCase().includes(q) || (cust.phone || '').includes(q);
+      });
+      if (matchingCalls.length === 0) return null;
+      return {
+        ...g,
+        calls: matchingCalls
+      };
+    }).filter(Boolean);
+  }, [dayGroups, searchDebounced, customersById]);
+
   // Filter chip definitions
   const chips = [{
     id: 'all',
@@ -2668,12 +2731,26 @@ function CallsView({
     count: stats.noAns
   }];
   return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-    className: "mb-4"
-  }, /*#__PURE__*/React.createElement("div", {
+    className: "mb-4 flex items-end justify-between gap-3"
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     className: "text-xs uppercase tracking-[0.25em] text-stone-500"
   }, "Outreach"), /*#__PURE__*/React.createElement("h1", {
     className: "font-display text-3xl text-stone-900 mt-1"
-  }, "Phone Calls")), activeQueueCount > 0 && filter !== 'all' && /*#__PURE__*/React.createElement("button", {
+  }, "Phone Calls")), /*#__PURE__*/React.createElement("div", {
+    className: "flex bg-stone-100 rounded-md p-0.5 text-xs"
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => setViewMode('customers'),
+    className: `px-3 py-1.5 rounded font-medium transition ${viewMode === 'customers' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-600 hover:text-stone-800'}`
+  }, /*#__PURE__*/React.createElement(Users, {
+    size: 12,
+    className: "inline mr-1"
+  }), " Customers"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setViewMode('days'),
+    className: `px-3 py-1.5 rounded font-medium transition ${viewMode === 'days' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-600 hover:text-stone-800'}`
+  }, /*#__PURE__*/React.createElement(Calendar, {
+    size: 12,
+    className: "inline mr-1"
+  }), " Day-wise"))), viewMode === 'customers' && activeQueueCount > 0 && filter !== 'all' && /*#__PURE__*/React.createElement("button", {
     onClick: () => setFilter('all'),
     className: "w-full bg-stone-900 text-amber-50 rounded-lg p-4 mb-4 flex items-center justify-between hover:bg-stone-800 transition text-left"
   }, /*#__PURE__*/React.createElement("div", {
@@ -2715,9 +2792,9 @@ function CallsView({
   }), /*#__PURE__*/React.createElement("input", {
     value: search,
     onChange: e => setSearch(e.target.value),
-    placeholder: "Search name or phone...",
+    placeholder: viewMode === 'days' ? 'Search customer in history...' : 'Search name or phone...',
     className: "w-full pl-9 pr-3 py-2.5 bg-white border border-stone-200 rounded-md text-sm focus:outline-none focus:border-stone-400"
-  })), /*#__PURE__*/React.createElement("div", {
+  })), viewMode === 'customers' && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
     className: "flex gap-1.5 flex-wrap mb-4"
   }, chips.map(({
     id,
@@ -2729,7 +2806,139 @@ function CallsView({
     className: `text-xs px-2.5 py-1 rounded-full border whitespace-nowrap inline-flex items-center gap-1.5 ${filter === id ? 'bg-stone-900 text-amber-50 border-stone-900' : 'bg-white text-stone-700 border-stone-200 hover:border-stone-400'}`
   }, label, count > 0 && /*#__PURE__*/React.createElement("span", {
     className: `text-[10px] font-mono-num ${filter === id ? 'text-amber-200/80' : 'text-stone-500'}`
-  }, count)))), filtered.length === 0 ? /*#__PURE__*/React.createElement("div", {
+  }, count))))), viewMode === 'days' && /*#__PURE__*/React.createElement(React.Fragment, null, filteredDayGroups.length === 0 ? /*#__PURE__*/React.createElement("div", {
+    className: "bg-white border border-stone-200 rounded-lg py-12 text-center text-stone-500 text-sm"
+  }, calls.length === 0 ? 'No calls logged yet. Start calling customers!' : 'No calls match your search.') : /*#__PURE__*/React.createElement("div", {
+    className: "space-y-3"
+  }, filteredDayGroups.map(g => {
+    const d = new Date(g.ymd + 'T00:00:00');
+    const isToday = g.ymd === todayYmd;
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yYmd = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`;
+    const isYesterday = g.ymd === yYmd;
+    const dayLabel = isToday ? 'Today' : isYesterday ? 'Yesterday' : d.toLocaleDateString('en-IN', {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short'
+    });
+    const fullDate = d.toLocaleDateString('en-IN', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    });
+    const isExpanded = expandedDay === g.ymd;
+    return /*#__PURE__*/React.createElement("div", {
+      key: g.ymd,
+      className: "bg-white border border-stone-200 rounded-lg overflow-hidden"
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: () => setExpandedDay(isExpanded ? null : g.ymd),
+      className: "w-full p-3 md:p-4 hover:bg-stone-50 transition text-left"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "flex items-center justify-between gap-3 mb-2"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "min-w-0"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "flex items-center gap-2 flex-wrap"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "font-display text-lg text-stone-900"
+    }, dayLabel), isToday && /*#__PURE__*/React.createElement("span", {
+      className: "text-[10px] uppercase tracking-wider bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded"
+    }, "Active")), /*#__PURE__*/React.createElement("div", {
+      className: "text-[11px] text-stone-500"
+    }, fullDate)), /*#__PURE__*/React.createElement("div", {
+      className: "flex items-center gap-2 shrink-0"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "text-right"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "text-xl font-display text-stone-900"
+    }, g.counts.total), /*#__PURE__*/React.createElement("div", {
+      className: "text-[10px] text-stone-500 uppercase tracking-wider"
+    }, "calls")), /*#__PURE__*/React.createElement(ChevronRight, {
+      size: 18,
+      className: `text-stone-400 transition ${isExpanded ? 'rotate-90' : ''}`
+    }))), /*#__PURE__*/React.createElement("div", {
+      className: "flex flex-wrap gap-1.5"
+    }, g.counts.visiting > 0 && /*#__PURE__*/React.createElement("span", {
+      className: `text-[11px] px-2 py-0.5 rounded-full ${OUTCOME_BADGE.visiting}`
+    }, /*#__PURE__*/React.createElement(Store, {
+      size: 10,
+      className: "inline mr-1"
+    }), g.counts.visiting, " Visit"), g.counts.video_call > 0 && /*#__PURE__*/React.createElement("span", {
+      className: `text-[11px] px-2 py-0.5 rounded-full ${OUTCOME_BADGE.video_call}`
+    }, /*#__PURE__*/React.createElement(Video, {
+      size: 10,
+      className: "inline mr-1"
+    }), g.counts.video_call, " Video"), g.counts.not_confirm > 0 && /*#__PURE__*/React.createElement("span", {
+      className: `text-[11px] px-2 py-0.5 rounded-full ${OUTCOME_BADGE.not_confirm}`
+    }, /*#__PURE__*/React.createElement(AlertCircle, {
+      size: 10,
+      className: "inline mr-1"
+    }), g.counts.not_confirm, " Not Conf"), g.counts.busy > 0 && /*#__PURE__*/React.createElement("span", {
+      className: `text-[11px] px-2 py-0.5 rounded-full ${OUTCOME_BADGE.busy}`
+    }, /*#__PURE__*/React.createElement(Clock, {
+      size: 10,
+      className: "inline mr-1"
+    }), g.counts.busy, " Busy"), g.counts.no_answer > 0 && /*#__PURE__*/React.createElement("span", {
+      className: `text-[11px] px-2 py-0.5 rounded-full ${OUTCOME_BADGE.no_answer}`
+    }, /*#__PURE__*/React.createElement(PhoneOff, {
+      size: 10,
+      className: "inline mr-1"
+    }), g.counts.no_answer, " No Ans"))), isExpanded && /*#__PURE__*/React.createElement("div", {
+      className: "border-t border-stone-100 bg-stone-50/50"
+    }, /*#__PURE__*/React.createElement("ul", {
+      className: "divide-y divide-stone-100"
+    }, g.calls.map(k => {
+      const cust = customersById[k.customerId];
+      const outcomeMeta = CALL_OUTCOMES.find(o => o.id === k.outcome);
+      const OutcomeIcon = outcomeMeta?.icon;
+      const timeStr = k.createdAt ? new Date(k.createdAt).toLocaleTimeString('en-IN', {
+        hour: '2-digit',
+        minute: '2-digit'
+      }) : '';
+      // Video sub-status
+      let badgeLabel = outcomeMeta?.shortLabel || k.outcome;
+      let badgeClass = OUTCOME_BADGE[k.outcome] || 'bg-stone-100 text-stone-700 border border-stone-200';
+      if (k.outcome === 'video_call') {
+        if (k.videoStatus === 'selected') {
+          badgeLabel = 'Video → Sold';
+          badgeClass = 'bg-emerald-100 text-emerald-900 border border-emerald-300';
+        } else if (k.videoStatus === 'not_selected') {
+          badgeLabel = 'Video → Failed';
+          badgeClass = 'bg-rose-100 text-rose-900 border border-rose-300';
+        } else {
+          badgeLabel = 'Video Pending';
+        }
+      }
+      return /*#__PURE__*/React.createElement("li", {
+        key: k.id,
+        className: "p-3 hover:bg-white transition"
+      }, /*#__PURE__*/React.createElement("div", {
+        className: "flex items-start gap-3"
+      }, /*#__PURE__*/React.createElement("div", {
+        className: "flex-1 min-w-0"
+      }, cust ? /*#__PURE__*/React.createElement("button", {
+        onClick: () => onOpenCustomer(cust),
+        className: "font-medium text-sm text-stone-900 hover:underline truncate text-left"
+      }, cust.name || '(no name)') : /*#__PURE__*/React.createElement("div", {
+        className: "font-medium text-sm text-stone-400 italic"
+      }, "(deleted customer)"), cust?.phone && /*#__PURE__*/React.createElement("div", {
+        className: "text-[11px] text-stone-500 font-mono-num"
+      }, cust.phone), k.notes && /*#__PURE__*/React.createElement("div", {
+        className: "text-xs text-stone-600 mt-1 italic"
+      }, "\"", k.notes, "\"")), /*#__PURE__*/React.createElement("div", {
+        className: "flex flex-col items-end gap-1 shrink-0"
+      }, /*#__PURE__*/React.createElement("span", {
+        className: `text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap ${badgeClass}`
+      }, OutcomeIcon && /*#__PURE__*/React.createElement(OutcomeIcon, {
+        size: 9,
+        className: "inline mr-0.5"
+      }), badgeLabel), timeStr && /*#__PURE__*/React.createElement("span", {
+        className: "text-[10px] text-stone-400 font-mono-num"
+      }, timeStr))));
+    }))));
+  }))), viewMode === 'customers' && /*#__PURE__*/React.createElement(React.Fragment, null, filtered.length === 0 ? /*#__PURE__*/React.createElement("div", {
     className: "bg-white border border-stone-200 rounded-lg py-12 text-center text-stone-500 text-sm"
   }, customers.length === 0 ? 'No customers yet.' : 'No customers match this filter.') : /*#__PURE__*/React.createElement("div", {
     className: "bg-white border border-stone-200 rounded-lg overflow-hidden"
@@ -2853,7 +3062,7 @@ function CallsView({
     size: 14
   })), /*#__PURE__*/React.createElement("div", {
     className: "text-[10px] text-stone-400 mt-1"
-  }, "Showing ", visibleCount, " of ", filtered.length))));
+  }, "Showing ", visibleCount, " of ", filtered.length)))));
 }
 
 // ============ SETTINGS ============
