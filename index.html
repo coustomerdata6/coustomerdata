@@ -429,9 +429,9 @@ const CALL_OUTCOMES = [{
   icon: Store
 }, {
   id: 'video_call',
-  label: 'Video Call',
-  shortLabel: 'Video',
-  icon: Video
+  label: 'WhatsApp Sent',
+  shortLabel: 'WhatsApp',
+  icon: MessageCircle
 }, {
   id: 'not_confirm',
   label: 'Not Confirmed Yet',
@@ -463,7 +463,8 @@ const OUTCOME_BTN = {
   no_answer: 'bg-amber-50 text-amber-800 hover:bg-amber-100 border-amber-200'
 };
 
-// Get display info for a call. Handles video_call sub-states (pending / sold / failed).
+// Get display info for a call. Handles video_call sub-states (pending / sold / failed)
+// and visiting sub-states (came / didn't come / pending).
 const getCallDisplay = call => {
   if (!call) return null;
   const def = CALL_OUTCOMES.find(o => o.id === call.outcome);
@@ -478,21 +479,42 @@ const getCallDisplay = call => {
   if (call.outcome === 'video_call') {
     if (call.videoStatus === 'selected') {
       return {
-        label: 'Sold via video ✓',
+        label: 'Sold via WhatsApp ✓',
         badge: 'bg-emerald-100 text-emerald-900 border border-emerald-300',
         icon: def.icon
       };
     }
     if (call.videoStatus === 'not_selected') {
       return {
-        label: 'Video failed ✗',
+        label: 'WhatsApp failed ✗',
         badge: 'bg-rose-100 text-rose-800 border border-rose-200',
         icon: def.icon
       };
     }
     return {
-      label: 'Video pending',
+      label: 'WhatsApp pending',
       badge: 'bg-amber-100 text-amber-900 border border-amber-300',
+      icon: def.icon
+    };
+  }
+  if (call.outcome === 'visiting') {
+    if (call.visitStatus === 'came') {
+      return {
+        label: 'Visited ✓',
+        badge: 'bg-emerald-100 text-emerald-900 border border-emerald-300',
+        icon: def.icon
+      };
+    }
+    if (call.visitStatus === 'no_show') {
+      return {
+        label: 'Did not visit ✗',
+        badge: 'bg-rose-100 text-rose-800 border border-rose-200',
+        icon: def.icon
+      };
+    }
+    return {
+      label: def.label,
+      badge: OUTCOME_BADGE[def.id],
       icon: def.icon
     };
   }
@@ -506,6 +528,10 @@ const getCallDisplay = call => {
 // Cooldown — after a call with this outcome, customer is hidden from "All" for these days
 const COOLDOWN_DAYS = {
   visiting: 21,
+  visiting_came: 60,
+  // They came & bought — give them space like a sold customer
+  visiting_no_show: 30,
+  // They didn't show — try again next month
   video_pending: 10,
   video_selected: 60,
   // Sold — treat like a regular post-sale customer
@@ -523,6 +549,11 @@ const callCooldownDays = call => {
     if (call.videoStatus === 'selected') return COOLDOWN_DAYS.video_selected;
     if (call.videoStatus === 'not_selected') return COOLDOWN_DAYS.video_not_selected;
     return COOLDOWN_DAYS.video_pending;
+  }
+  if (call.outcome === 'visiting') {
+    if (call.visitStatus === 'came') return COOLDOWN_DAYS.visiting_came;
+    if (call.visitStatus === 'no_show') return COOLDOWN_DAYS.visiting_no_show;
+    return COOLDOWN_DAYS.visiting;
   }
   return COOLDOWN_DAYS[call.outcome] || 0;
 };
@@ -983,9 +1014,15 @@ function App() {
   };
   const deleteCustomer = async id => {
     const c = customers.find(x => x.id === id);
+    const pCount = purchases.filter(p => p.customerId === id).length;
+    const cCount = calls.filter(k => k.customerId === id).length;
+    const parts = [];
+    if (pCount > 0) parts.push(`${pCount} purchase${pCount === 1 ? '' : 's'}`);
+    if (cCount > 0) parts.push(`${cCount} call${cCount === 1 ? '' : 's'}`);
+    const detail = parts.length ? ` and their ${parts.join(' & ')}` : '';
     setConfirmModal({
       title: 'Delete customer?',
-      message: `This will delete ${c?.name} and all their ${purchases.filter(p => p.customerId === id).length} purchase records. Cannot be undone.`,
+      message: `This will permanently delete ${c?.name}${detail}. Cannot be undone.`,
       onConfirm: async () => {
         await saveCustomers(customers.filter(c => c.id !== id));
         await savePurchases(purchases.filter(p => p.customerId !== id));
@@ -1088,7 +1125,7 @@ function App() {
       ...updates
     } : k);
     await saveCalls(next);
-    if (updates.videoStatus === 'selected') showToast('Marked: Sold ✓');else if (updates.videoStatus === 'not_selected') showToast('Marked: Video failed');else showToast('Call updated');
+    if (updates.videoStatus === 'selected') showToast('Marked: Sold ✓');else if (updates.videoStatus === 'not_selected') showToast('Marked: WhatsApp failed');else if (updates.visitStatus === 'came') showToast('Marked: Visited ✓');else if (updates.visitStatus === 'no_show') showToast('Marked: Did not visit');else showToast('Call updated');
   };
 
   // ===== Excel import =====
@@ -1126,7 +1163,31 @@ function App() {
         if (typeof v === 'number') return v;
         return parseFloat(String(v).replace(/[^0-9.\-]/g, '')) || 0;
       };
-      const header = rows[0].map(h => cell(h).toLowerCase());
+
+      // SMART HEADER DETECTION — scan first 10 rows for the actual header
+      // Header row should have key fields like "name", "phone"/"mobile" OR "bill" etc.
+      let headerRowIdx = 0;
+      let bestScore = 0;
+      const maxScan = Math.min(10, rows.length);
+      for (let i = 0; i < maxScan; i++) {
+        const cells = (rows[i] || []).map(h => cell(h).toLowerCase());
+        let score = 0;
+        cells.forEach(c => {
+          if (!c) return;
+          if (c.includes('name') && !c.includes('item') && !c.includes('brand')) score += 3;
+          if (c.includes('mobile') || c.includes('phone') || c.includes('contact')) score += 3;
+          if (c.includes('bill') && c.includes('no')) score += 2;
+          if (c.includes('bill') && c.includes('date')) score += 2;
+          if (c.includes('item')) score += 1;
+          if (c.includes('brand')) score += 1;
+          if (c.includes('amount') || c.includes('sale value')) score += 2;
+        });
+        if (score > bestScore) {
+          bestScore = score;
+          headerRowIdx = i;
+        }
+      }
+      const header = (rows[headerRowIdx] || []).map(h => cell(h).toLowerCase());
       const hasBillNo = header.some(h => h.includes('bill') && (h.includes('no') || h.includes('number')));
       const hasItem = header.some(h => h.includes('item'));
       const hasNetSale = header.some(h => h.includes('net sale') || h.includes('sale value'));
@@ -1143,9 +1204,18 @@ function App() {
           alert('Could not detect required POS columns. Need customer name, mobile number, and net sale value.');
           return;
         }
+
+        // Known placeholder phones to skip (walk-in/cash sales in POS systems)
+        const WALKIN_PHONES = new Set(['9988776655', '9999999999', '1111111111', '0000000000', '1234567890', '9876543210', '0987654321']);
         const customersMap = {};
         const billsMap = {};
-        rows.slice(1).forEach(r => {
+        let walkinSkipped = 0;
+        let emptyNameSkipped = 0;
+        let invalidPhoneSkipped = 0;
+        let totalRetSkipped = 0;
+
+        // Skip rows AT and BEFORE headerRowIdx
+        rows.slice(headerRowIdx + 1).forEach(r => {
           const phone = normalizePhone(cell(r[phoneI]));
           const name = cell(r[nameI]);
           const billNo = cell(r[billNoI]);
@@ -1153,7 +1223,23 @@ function App() {
           const amount = num(r[amountI]);
           const item = cell(r[itemI]);
           const brand = cell(r[brandI]);
-          if (!phone || phone.length < 7 || !name) return;
+
+          // Skip "GRAND TOTALS" row or other footer rows
+          if (billNo && billNo.toLowerCase().includes('total')) return;
+
+          // Track skip reasons for reporting
+          if (!phone || phone.length < 7) {
+            if (phone || name) invalidPhoneSkipped++;
+            return;
+          }
+          if (WALKIN_PHONES.has(phone)) {
+            walkinSkipped++;
+            return;
+          }
+          if (!name) {
+            emptyNameSkipped++;
+            return;
+          }
           if (!customersMap[phone]) {
             customersMap[phone] = {
               id: uid(),
@@ -1178,12 +1264,14 @@ function App() {
             };
           }
           billsMap[billNo].total += amount;
+          if (amount < 0) totalRetSkipped++;
           billsMap[billNo].items.push(item || brand || 'Item');
           const cat = inferCategory(item, brand);
           billsMap[billNo].categories[cat] = (billsMap[billNo].categories[cat] || 0) + amount;
         });
         const newCustomers = Object.values(customersMap);
-        const bills = Object.values(billsMap);
+        // Filter out bills with 0 or negative total (all-return bills)
+        const bills = Object.values(billsMap).filter(b => b.total > 0);
         if (newCustomers.length === 0) {
           alert('No valid rows found. Check that name and phone columns have data.');
           return;
@@ -1191,7 +1279,13 @@ function App() {
         setImportPreview({
           type: 'pos',
           newCustomers,
-          bills
+          bills,
+          stats: {
+            walkinSkipped,
+            emptyNameSkipped,
+            invalidPhoneSkipped,
+            returnRowsCount: totalRetSkipped
+          }
         });
       } else {
         const nameI = header.findIndex(h => h.includes('name'));
@@ -1200,10 +1294,10 @@ function App() {
         const annI = header.findIndex(h => h.includes('anniv'));
         const noteI = header.findIndex(h => h.includes('note') || h.includes('remark'));
         if (nameI < 0 || phoneI < 0) {
-          alert('Excel file must have "Name" and "Phone" columns in the first row.');
+          alert('Excel file must have "Name" and "Phone" columns. Detected headers: ' + header.filter(Boolean).join(', '));
           return;
         }
-        const parsed = rows.slice(1).map(r => ({
+        const parsed = rows.slice(headerRowIdx + 1).map(r => ({
           id: uid(),
           name: cell(r[nameI]),
           phone: normalizePhone(cell(r[phoneI])),
@@ -1277,10 +1371,15 @@ function App() {
         await savePurchases([...newPurchases, ...purchases]);
       }
       const skippedC = incomingCustomers.length - customersToAdd.length;
-      const parts = [`${customersToAdd.length} customers`];
-      if (bills.length > 0) parts.push(`${newPurchases.length} sales`);
-      const dup = skippedC + skippedBills;
-      const msg = `Imported ${parts.join(', ')}` + (dup > 0 ? ` (skipped ${dup} duplicates)` : '');
+      // Build clear summary
+      const okParts = [];
+      okParts.push(`${customersToAdd.length} new customer${customersToAdd.length === 1 ? '' : 's'}`);
+      if (bills.length > 0) okParts.push(`${newPurchases.length} new sale${newPurchases.length === 1 ? '' : 's'}`);
+      const skipParts = [];
+      if (skippedC > 0) skipParts.push(`${skippedC} existing customer${skippedC === 1 ? '' : 's'}`);
+      if (skippedBills > 0) skipParts.push(`${skippedBills} existing bill${skippedBills === 1 ? '' : 's'}`);
+      let msg = `Imported ${okParts.join(' + ')}`;
+      if (skipParts.length) msg += ` · Skipped ${skipParts.join(' + ')}`;
       showToast(msg);
     } finally {
       setImporting(false);
@@ -1503,7 +1602,19 @@ function App() {
     className: "hidden"
   }), importPreview && /*#__PURE__*/React.createElement(ConfirmModal, {
     title: importPreview.type === 'pos' ? `Import ${importPreview.newCustomers.length} customers and ${importPreview.bills.length} sales?` : `Import ${importPreview.newCustomers.length} customers?`,
-    message: importPreview.type === 'pos' ? `POS bill export detected. ${importPreview.newCustomers.length} unique customers, ${importPreview.bills.length} bills totalling ${formatINR(importPreview.bills.reduce((s, b) => s + (b.total || 0), 0))}. Duplicates by phone or bill no. will be skipped.` : `Found ${importPreview.newCustomers.length} customers. Preview: ${importPreview.newCustomers.slice(0, 3).map(c => c.name).join(', ')}${importPreview.newCustomers.length > 3 ? `, +${importPreview.newCustomers.length - 3} more` : ''}. Duplicates by phone will be skipped.`,
+    message: (() => {
+      if (importPreview.type === 'pos') {
+        const total = formatINR(importPreview.bills.reduce((s, b) => s + (b.total || 0), 0));
+        const s = importPreview.stats || {};
+        const skipParts = [];
+        if (s.walkinSkipped) skipParts.push(`${s.walkinSkipped} walk-in/placeholder rows`);
+        if (s.emptyNameSkipped) skipParts.push(`${s.emptyNameSkipped} rows without name`);
+        if (s.invalidPhoneSkipped) skipParts.push(`${s.invalidPhoneSkipped} rows with invalid phone`);
+        const skipNote = skipParts.length ? ` Auto-skipped: ${skipParts.join(', ')}.` : '';
+        return `POS bill export detected. ${importPreview.newCustomers.length} unique customers, ${importPreview.bills.length} bills totalling ${total}.${skipNote} On import: existing phones and bill numbers will be skipped automatically.`;
+      }
+      return `Found ${importPreview.newCustomers.length} customers. Preview: ${importPreview.newCustomers.slice(0, 3).map(c => c.name).join(', ')}${importPreview.newCustomers.length > 3 ? `, +${importPreview.newCustomers.length - 3} more` : ''}. Duplicates by phone will be skipped.`;
+    })(),
     confirmLabel: "Import",
     onConfirm: async () => {
       await handleImport(importPreview);
@@ -1769,7 +1880,7 @@ function Dashboard({
     const ym = d.toISOString().slice(0, 7);
     return purchases.filter(p => p.date?.startsWith(ym)).reduce((s, p) => s + (Number(p.amount) || 0), 0);
   }, [purchases]);
-  const topByMoney = useMemo(() => [...customers].sort((a, b) => b.totalSpent - a.totalSpent).slice(0, 5), [customers]);
+  const topByMoney = useMemo(() => [...customers].sort((a, b) => (b.totalSpent || 0) - (a.totalSpent || 0)).slice(0, 5), [customers]);
   const dormant = useMemo(() => customers.filter(c => c.isDormant && c.visits > 0).length, [customers]);
   const birthdaysThisMonth = useMemo(() => {
     const m = new Date().getMonth();
@@ -1990,9 +2101,9 @@ function CustomersList({
     let list = customers.filter(c => {
       if (tagFilter && !(c.tags || []).includes(tagFilter)) return false;
       if (!qn) return true;
-      return c.name.toLowerCase().includes(qn) || qPhone && normalizePhone(c.phone).includes(qPhone);
+      return (c.name || '').toLowerCase().includes(qn) || qPhone && normalizePhone(c.phone).includes(qPhone);
     });
-    if (sort === 'name') list.sort((a, b) => a.name.localeCompare(b.name));else if (sort === 'spent') list.sort((a, b) => b.totalSpent - a.totalSpent);else if (sort === 'visits') list.sort((a, b) => b.visits - a.visits);else list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    if (sort === 'name') list.sort((a, b) => (a.name || '').localeCompare(b.name || ''));else if (sort === 'spent') list.sort((a, b) => (b.totalSpent || 0) - (a.totalSpent || 0));else if (sort === 'visits') list.sort((a, b) => (b.visits || 0) - (a.visits || 0));else list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
     return list;
   }, [customers, qDebounced, tagFilter, sort]);
   return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
@@ -2256,6 +2367,7 @@ function CustomerDetail({
     const display = getCallDisplay(call);
     const Icon = display?.icon || Phone;
     const isPendingVideo = call.outcome === 'video_call' && !call.videoStatus;
+    const isPendingVisit = call.outcome === 'visiting' && !call.visitStatus;
     return /*#__PURE__*/React.createElement("li", {
       key: call.id,
       className: "px-5 py-3.5 group"
@@ -2285,9 +2397,9 @@ function CustomerDetail({
       className: "ml-13 mt-2 pl-13 px-3 py-2 bg-amber-50 border border-amber-200 rounded-md"
     }, /*#__PURE__*/React.createElement("div", {
       className: "text-[11px] font-medium text-amber-900 mb-1.5 flex items-center gap-1.5"
-    }, /*#__PURE__*/React.createElement(Video, {
+    }, /*#__PURE__*/React.createElement(MessageCircle, {
       size: 12
-    }), " Video call done? Did they buy?"), /*#__PURE__*/React.createElement("div", {
+    }), " WhatsApp sent \u2014 did they buy?"), /*#__PURE__*/React.createElement("div", {
       className: "flex gap-1.5"
     }, /*#__PURE__*/React.createElement("button", {
       onClick: () => onUpdateCall(call.id, {
@@ -2303,7 +2415,29 @@ function CustomerDetail({
       className: "flex-1 py-1.5 text-xs font-medium rounded-md bg-white border border-rose-300 text-rose-700 hover:bg-rose-50 inline-flex items-center justify-center gap-1.5 transition"
     }, /*#__PURE__*/React.createElement(X, {
       size: 12
-    }), " No, didn't buy"))));
+    }), " No, didn't buy"))), isPendingVisit && /*#__PURE__*/React.createElement("div", {
+      className: "ml-13 mt-2 pl-13 px-3 py-2 bg-amber-50 border border-amber-200 rounded-md"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "text-[11px] font-medium text-amber-900 mb-1.5 flex items-center gap-1.5"
+    }, /*#__PURE__*/React.createElement(Store, {
+      size: 12
+    }), " Did they visit the shop?"), /*#__PURE__*/React.createElement("div", {
+      className: "flex gap-1.5"
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: () => onUpdateCall(call.id, {
+        visitStatus: 'came'
+      }),
+      className: "flex-1 py-1.5 text-xs font-medium rounded-md bg-emerald-600 text-white hover:bg-emerald-700 inline-flex items-center justify-center gap-1.5 transition"
+    }, /*#__PURE__*/React.createElement(Check, {
+      size: 12
+    }), " Yes, visited"), /*#__PURE__*/React.createElement("button", {
+      onClick: () => onUpdateCall(call.id, {
+        visitStatus: 'no_show'
+      }),
+      className: "flex-1 py-1.5 text-xs font-medium rounded-md bg-white border border-rose-300 text-rose-700 hover:bg-rose-50 inline-flex items-center justify-center gap-1.5 transition"
+    }, /*#__PURE__*/React.createElement(X, {
+      size: 12
+    }), " No-show"))));
   }))));
 }
 function Stat({
@@ -2340,7 +2474,7 @@ function AllPurchases({
       if (catFilter && p.category !== catFilter) return false;
       if (!qn) return true;
       const c = cMap[p.customerId];
-      return c && (c.name.toLowerCase().includes(qn) || qPhone && normalizePhone(c.phone).includes(qPhone));
+      return c && ((c.name || '').toLowerCase().includes(qn) || qPhone && normalizePhone(c.phone).includes(qPhone));
     }).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   }, [purchases, qDebounced, catFilter, cMap]);
   const total = sorted.reduce((s, p) => s + (Number(p.amount) || 0), 0);
@@ -2433,8 +2567,8 @@ function Leaderboard({
   const [limit, setLimit] = useState(10);
   const list = useMemo(() => {
     const onlyWithActivity = customers.filter(c => c.visits > 0);
-    if (tab === 'spent') return [...onlyWithActivity].sort((a, b) => b.totalSpent - a.totalSpent);
-    if (tab === 'visits') return [...onlyWithActivity].sort((a, b) => b.visits - a.visits);
+    if (tab === 'spent') return [...onlyWithActivity].sort((a, b) => (b.totalSpent || 0) - (a.totalSpent || 0));
+    if (tab === 'visits') return [...onlyWithActivity].sort((a, b) => (b.visits || 0) - (a.visits || 0));
     return [...onlyWithActivity].sort((a, b) => (b.lastVisit || '').localeCompare(a.lastVisit || ''));
   }, [customers, tab]);
   const topN = list.slice(0, limit);
@@ -2532,10 +2666,15 @@ function CallsView({
   const searchDebounced = useDebouncedValue(search, 150);
   // Track which (customer + outcome) is currently saving — prevents duplicate clicks
   const [savingKey, setSavingKey] = useState(null);
+  // Pagination for visits and day-wise views
+  const [visitsVisibleCount, setVisitsVisibleCount] = useState(50);
+  const [daysVisibleCount, setDaysVisibleCount] = useState(20);
 
   // Reset pagination when search/filter changes
   useEffect(() => {
     setVisibleCount(50);
+    setVisitsVisibleCount(50);
+    setDaysVisibleCount(20);
   }, [searchDebounced, filter]);
 
   // Customer lookup for day view
@@ -2553,7 +2692,7 @@ function CallsView({
     calls.forEach(k => {
       (map[k.customerId] = map[k.customerId] || []).push(k);
     });
-    Object.values(map).forEach(arr => arr.sort((a, b) => b.createdAt - a.createdAt));
+    Object.values(map).forEach(arr => arr.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)));
     return map;
   }, [calls]);
   const todayYmd = today();
@@ -2566,6 +2705,11 @@ function CallsView({
       if (lc.videoStatus === 'selected') return 'video_selected';
       if (lc.videoStatus === 'not_selected') return 'video_not_selected';
       return 'video_pending';
+    }
+    if (lc.outcome === 'visiting') {
+      if (lc.visitStatus === 'came') return 'visited_came';
+      if (lc.visitStatus === 'no_show') return 'visited_no_show';
+      return 'visiting';
     }
     return lc.outcome;
   };
@@ -2601,17 +2745,19 @@ function CallsView({
     const qPhone = normalizePhone(searchDebounced);
     let list = customers.filter(c => {
       if (q) {
-        const hit = c.name.toLowerCase().includes(q) || qPhone && normalizePhone(c.phone).includes(qPhone);
+        const hit = (c.name || '').toLowerCase().includes(q) || qPhone && normalizePhone(c.phone).includes(qPhone);
         if (!hit) return false;
       }
       const lc = callsByCustomer[c.id]?.[0];
       // "All" = active queue: never-called OR cooldown elapsed
       if (filter === 'all') return !lc || !isInCooldown(lc);
+      // "Everyone" = show every single customer, no filter
+      if (filter === 'everyone') return true;
       if (filter === 'not_called') return !lc;
       if (filter === 'called_today') return lc && lc.date === todayYmd;
       return callState(c) === filter;
     });
-    list.sort((a, b) => b.totalSpent - a.totalSpent);
+    list.sort((a, b) => (b.totalSpent || 0) - (a.totalSpent || 0));
     return list;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customers, searchDebounced, filter, callsByCustomer, todayYmd]);
@@ -2665,7 +2811,7 @@ function CallsView({
       if (k.outcome in map[ymd].counts) map[ymd].counts[k.outcome]++;
     });
     // Sort each day's calls by time (newest first)
-    Object.values(map).forEach(g => g.calls.sort((a, b) => b.createdAt - a.createdAt));
+    Object.values(map).forEach(g => g.calls.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)));
     // Return as array sorted newest day first
     return Object.values(map).sort((a, b) => b.ymd.localeCompare(a.ymd));
   }, [calls]);
@@ -2688,11 +2834,98 @@ function CallsView({
     }).filter(Boolean);
   }, [dayGroups, searchDebounced, customersById]);
 
+  // ===== VISITS view: all customers with outcome === 'visiting' =====
+  const [visitFilter, setVisitFilter] = useState('all'); // all | pending | came | no_show | overdue
+  useEffect(() => {
+    setVisitsVisibleCount(50);
+  }, [visitFilter]);
+  const visitsData = useMemo(() => {
+    const list = [];
+    customers.forEach(c => {
+      // Get the latest "visiting" call (not necessarily latest overall)
+      const visitCalls = (callsByCustomer[c.id] || []).filter(k => k.outcome === 'visiting');
+      if (visitCalls.length === 0) return;
+      const latestVisit = visitCalls[0]; // already sorted newest first
+      // Days since call
+      let daysSince = 0;
+      if (latestVisit.date) {
+        const d = parseLocalYMD(latestVisit.date);
+        if (d) {
+          daysSince = Math.floor((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24));
+        }
+      }
+      list.push({
+        customer: c,
+        call: latestVisit,
+        daysSince,
+        status: latestVisit.visitStatus || 'pending' // pending | came | no_show
+      });
+    });
+    // Sort: pending first (newest first), then came, then no_show
+    list.sort((a, b) => {
+      const order = {
+        pending: 0,
+        came: 1,
+        no_show: 2
+      };
+      const diff = order[a.status] - order[b.status];
+      if (diff !== 0) return diff;
+      return (b.call.createdAt || 0) - (a.call.createdAt || 0);
+    });
+    return list;
+  }, [customers, callsByCustomer]);
+  const visitsFiltered = useMemo(() => {
+    const q = searchDebounced.toLowerCase().trim();
+    return visitsData.filter(v => {
+      // Search filter
+      if (q) {
+        const hit = (v.customer.name || '').toLowerCase().includes(q) || (v.customer.phone || '').includes(q);
+        if (!hit) return false;
+      }
+      // Status filter
+      if (visitFilter === 'all') return true;
+      if (visitFilter === 'pending') return v.status === 'pending';
+      if (visitFilter === 'came') return v.status === 'came';
+      if (visitFilter === 'no_show') return v.status === 'no_show';
+      if (visitFilter === 'overdue') return v.status === 'pending' && v.daysSince >= 21;
+      return true;
+    });
+  }, [visitsData, searchDebounced, visitFilter]);
+
+  // Visit stats
+  const visitStats = useMemo(() => {
+    let pending = 0,
+      came = 0,
+      noShow = 0,
+      overdue = 0;
+    visitsData.forEach(v => {
+      if (v.status === 'came') came++;else if (v.status === 'no_show') noShow++;else {
+        pending++;
+        if (v.daysSince >= 21) overdue++;
+      }
+    });
+    // Conversion rate = % of decided customers who actually came
+    const decided = came + noShow;
+    const conversionRate = decided > 0 ? Math.round(came / decided * 100) : null;
+    return {
+      total: visitsData.length,
+      pending,
+      came,
+      noShow,
+      overdue,
+      conversionRate
+    };
+  }, [visitsData]);
+
   // Filter chip definitions
   const chips = [{
     id: 'all',
-    label: 'All',
+    label: 'Queue',
     count: activeQueueCount
+  }, {
+    id: 'everyone',
+    label: 'Everyone',
+    count: customers.length
   }, {
     id: 'not_called',
     label: 'Not called',
@@ -2707,7 +2940,7 @@ function CallsView({
     count: stats.willVisit
   }, {
     id: 'video_pending',
-    label: 'Video pending',
+    label: 'WhatsApp pending',
     count: stats.videoPending
   }, {
     id: 'video_selected',
@@ -2750,7 +2983,13 @@ function CallsView({
   }, /*#__PURE__*/React.createElement(Calendar, {
     size: 12,
     className: "inline mr-1"
-  }), " Day-wise"))), viewMode === 'customers' && activeQueueCount > 0 && filter !== 'all' && /*#__PURE__*/React.createElement("button", {
+  }), " Day-wise"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setViewMode('visits'),
+    className: `px-3 py-1.5 rounded font-medium transition ${viewMode === 'visits' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-600 hover:text-stone-800'}`
+  }, /*#__PURE__*/React.createElement(Store, {
+    size: 12,
+    className: "inline mr-1"
+  }), " Visits"))), viewMode === 'customers' && activeQueueCount > 0 && filter !== 'all' && /*#__PURE__*/React.createElement("button", {
     onClick: () => setFilter('all'),
     className: "w-full bg-stone-900 text-amber-50 rounded-lg p-4 mb-4 flex items-center justify-between hover:bg-stone-800 transition text-left"
   }, /*#__PURE__*/React.createElement("div", {
@@ -2765,6 +3004,21 @@ function CallsView({
     className: "flex items-center gap-1 text-sm font-medium bg-amber-200 text-stone-900 px-3 py-2 rounded-md shrink-0 ml-3"
   }, "Start ", /*#__PURE__*/React.createElement(ChevronRight, {
     size: 15
+  }))), viewMode === 'customers' && stats.calledToday > 0 && /*#__PURE__*/React.createElement("div", {
+    className: "mb-3 bg-stone-900 text-amber-50 rounded-lg p-3 flex items-center justify-between gap-2 flex-wrap"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center gap-2.5"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "h-9 w-9 rounded-full bg-amber-50 text-stone-900 flex items-center justify-center font-display text-base"
+  }, stats.calledToday), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    className: "text-[10px] uppercase tracking-[0.18em] text-amber-200/70"
+  }, "Today's outreach"), /*#__PURE__*/React.createElement("div", {
+    className: "text-sm text-amber-50"
+  }, stats.calledToday, " call", stats.calledToday === 1 ? '' : 's', " made"))), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setViewMode('days'),
+    className: "text-[11px] px-2.5 py-1 bg-amber-50/10 hover:bg-amber-50/20 text-amber-50 rounded-md transition inline-flex items-center gap-1"
+  }, "See details ", /*#__PURE__*/React.createElement(ChevronRight, {
+    size: 11
   }))), /*#__PURE__*/React.createElement("div", {
     className: "grid grid-cols-2 md:grid-cols-4 gap-3 mb-4"
   }, /*#__PURE__*/React.createElement(StatCard, {
@@ -2776,9 +3030,9 @@ function CallsView({
     value: stats.willVisit,
     icon: Store
   }), /*#__PURE__*/React.createElement(StatCard, {
-    label: "Video pending",
+    label: "WhatsApp pending",
     value: stats.videoPending,
-    icon: Video,
+    icon: MessageCircle,
     accent: stats.videoPending > 0 ? 'warn' : null
   }), /*#__PURE__*/React.createElement(StatCard, {
     label: "Sold \u2713",
@@ -2810,7 +3064,7 @@ function CallsView({
     className: "bg-white border border-stone-200 rounded-lg py-12 text-center text-stone-500 text-sm"
   }, calls.length === 0 ? 'No calls logged yet. Start calling customers!' : 'No calls match your search.') : /*#__PURE__*/React.createElement("div", {
     className: "space-y-3"
-  }, filteredDayGroups.map(g => {
+  }, filteredDayGroups.slice(0, daysVisibleCount).map(g => {
     const d = new Date(g.ymd + 'T00:00:00');
     const isToday = g.ymd === todayYmd;
     const yesterday = new Date();
@@ -2867,10 +3121,10 @@ function CallsView({
       className: "inline mr-1"
     }), g.counts.visiting, " Visit"), g.counts.video_call > 0 && /*#__PURE__*/React.createElement("span", {
       className: `text-[11px] px-2 py-0.5 rounded-full ${OUTCOME_BADGE.video_call}`
-    }, /*#__PURE__*/React.createElement(Video, {
+    }, /*#__PURE__*/React.createElement(MessageCircle, {
       size: 10,
       className: "inline mr-1"
-    }), g.counts.video_call, " Video"), g.counts.not_confirm > 0 && /*#__PURE__*/React.createElement("span", {
+    }), g.counts.video_call, " WhatsApp"), g.counts.not_confirm > 0 && /*#__PURE__*/React.createElement("span", {
       className: `text-[11px] px-2 py-0.5 rounded-full ${OUTCOME_BADGE.not_confirm}`
     }, /*#__PURE__*/React.createElement(AlertCircle, {
       size: 10,
@@ -2897,18 +3151,26 @@ function CallsView({
         hour: '2-digit',
         minute: '2-digit'
       }) : '';
-      // Video sub-status
+      // Sub-status badges
       let badgeLabel = outcomeMeta?.shortLabel || k.outcome;
       let badgeClass = OUTCOME_BADGE[k.outcome] || 'bg-stone-100 text-stone-700 border border-stone-200';
       if (k.outcome === 'video_call') {
         if (k.videoStatus === 'selected') {
-          badgeLabel = 'Video → Sold';
+          badgeLabel = 'WhatsApp → Sold';
           badgeClass = 'bg-emerald-100 text-emerald-900 border border-emerald-300';
         } else if (k.videoStatus === 'not_selected') {
-          badgeLabel = 'Video → Failed';
+          badgeLabel = 'WhatsApp → Failed';
           badgeClass = 'bg-rose-100 text-rose-900 border border-rose-300';
         } else {
-          badgeLabel = 'Video Pending';
+          badgeLabel = 'WhatsApp Pending';
+        }
+      } else if (k.outcome === 'visiting') {
+        if (k.visitStatus === 'came') {
+          badgeLabel = 'Visited ✓';
+          badgeClass = 'bg-emerald-100 text-emerald-900 border border-emerald-300';
+        } else if (k.visitStatus === 'no_show') {
+          badgeLabel = 'No-show ✗';
+          badgeClass = 'bg-rose-100 text-rose-900 border border-rose-300';
         }
       }
       return /*#__PURE__*/React.createElement("li", {
@@ -2938,7 +3200,158 @@ function CallsView({
         className: "text-[10px] text-stone-400 font-mono-num"
       }, timeStr))));
     }))));
-  }))), viewMode === 'customers' && /*#__PURE__*/React.createElement(React.Fragment, null, filtered.length === 0 ? /*#__PURE__*/React.createElement("div", {
+  }), filteredDayGroups.length > daysVisibleCount && /*#__PURE__*/React.createElement("div", {
+    className: "px-4 py-4 bg-stone-50 border border-stone-200 rounded-lg text-center"
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => setDaysVisibleCount(c => c + 20),
+    className: "text-sm font-medium text-stone-700 hover:text-stone-900 inline-flex items-center gap-1.5"
+  }, "Show 20 more days ", /*#__PURE__*/React.createElement(ChevronRight, {
+    size: 14
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "text-[10px] text-stone-400 mt-1"
+  }, "Showing ", daysVisibleCount, " of ", filteredDayGroups.length, " days")))), viewMode === 'visits' && /*#__PURE__*/React.createElement(React.Fragment, null, visitStats.conversionRate !== null && /*#__PURE__*/React.createElement("div", {
+    className: "mb-3 px-4 py-3 bg-gradient-to-r from-emerald-50 to-amber-50 border border-emerald-200 rounded-lg flex items-center justify-between flex-wrap gap-2"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center gap-3"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: `h-12 w-12 rounded-full flex items-center justify-center ${visitStats.conversionRate >= 50 ? 'bg-emerald-600' : visitStats.conversionRate >= 25 ? 'bg-amber-500' : 'bg-rose-500'} text-white`
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "text-center leading-tight"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "text-base font-display"
+  }, visitStats.conversionRate, "%"))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    className: "text-xs uppercase tracking-wider text-stone-600"
+  }, "Conversion Rate"), /*#__PURE__*/React.createElement("div", {
+    className: "text-sm text-stone-800"
+  }, visitStats.came, " of ", visitStats.came + visitStats.noShow, " actually visited"))), /*#__PURE__*/React.createElement("div", {
+    className: "text-xs text-stone-500 italic"
+  }, visitStats.conversionRate >= 50 ? '🎯 Strong follow-through!' : visitStats.conversionRate >= 25 ? '👍 Decent — call them again' : '📞 Many promises, few visits')), /*#__PURE__*/React.createElement("div", {
+    className: "grid grid-cols-2 md:grid-cols-4 gap-2 mb-3"
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => setVisitFilter('all'),
+    className: `text-left rounded-lg border p-3 transition ${visitFilter === 'all' ? 'bg-stone-900 text-amber-50 border-stone-900' : 'bg-white border-stone-200 hover:border-stone-400'}`
+  }, /*#__PURE__*/React.createElement("div", {
+    className: `text-[10px] uppercase tracking-wider ${visitFilter === 'all' ? 'text-amber-200/80' : 'text-stone-500'}`
+  }, "Total promised"), /*#__PURE__*/React.createElement("div", {
+    className: "text-2xl font-display mt-0.5"
+  }, visitStats.total)), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setVisitFilter('pending'),
+    className: `text-left rounded-lg border p-3 transition ${visitFilter === 'pending' ? 'bg-amber-500 text-white border-amber-500' : 'bg-amber-50 border-amber-200 hover:border-amber-400'}`
+  }, /*#__PURE__*/React.createElement("div", {
+    className: `text-[10px] uppercase tracking-wider ${visitFilter === 'pending' ? 'text-amber-100' : 'text-amber-700'}`
+  }, "Pending"), /*#__PURE__*/React.createElement("div", {
+    className: `text-2xl font-display mt-0.5 ${visitFilter === 'pending' ? 'text-white' : 'text-amber-900'}`
+  }, visitStats.pending)), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setVisitFilter('came'),
+    className: `text-left rounded-lg border p-3 transition ${visitFilter === 'came' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-emerald-50 border-emerald-200 hover:border-emerald-400'}`
+  }, /*#__PURE__*/React.createElement("div", {
+    className: `text-[10px] uppercase tracking-wider ${visitFilter === 'came' ? 'text-emerald-100' : 'text-emerald-700'}`
+  }, "Visited \u2713"), /*#__PURE__*/React.createElement("div", {
+    className: `text-2xl font-display mt-0.5 ${visitFilter === 'came' ? 'text-white' : 'text-emerald-900'}`
+  }, visitStats.came)), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setVisitFilter('no_show'),
+    className: `text-left rounded-lg border p-3 transition ${visitFilter === 'no_show' ? 'bg-rose-600 text-white border-rose-600' : 'bg-rose-50 border-rose-200 hover:border-rose-400'}`
+  }, /*#__PURE__*/React.createElement("div", {
+    className: `text-[10px] uppercase tracking-wider ${visitFilter === 'no_show' ? 'text-rose-100' : 'text-rose-700'}`
+  }, "No-show \u2717"), /*#__PURE__*/React.createElement("div", {
+    className: `text-2xl font-display mt-0.5 ${visitFilter === 'no_show' ? 'text-white' : 'text-rose-900'}`
+  }, visitStats.noShow))), visitStats.overdue > 0 && visitFilter !== 'overdue' && /*#__PURE__*/React.createElement("button", {
+    onClick: () => setVisitFilter('overdue'),
+    className: "w-full mb-3 px-3 py-2 bg-amber-100 border border-amber-300 rounded-md text-sm text-amber-900 text-left flex items-center justify-between hover:bg-amber-200"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "inline-flex items-center gap-1.5"
+  }, /*#__PURE__*/React.createElement(AlertCircle, {
+    size: 14
+  }), " ", /*#__PURE__*/React.createElement("strong", null, visitStats.overdue), " customers promised to visit but haven't come in 21+ days"), /*#__PURE__*/React.createElement(ChevronRight, {
+    size: 14
+  })), visitsFiltered.length === 0 ? /*#__PURE__*/React.createElement("div", {
+    className: "bg-white border border-stone-200 rounded-lg py-12 text-center text-stone-500 text-sm"
+  }, visitsData.length === 0 ? "No 'Will Visit' calls yet. Mark customers as 'Visit' when they promise to come." : 'No customers match this filter.') : /*#__PURE__*/React.createElement("div", {
+    className: "bg-white border border-stone-200 rounded-lg overflow-hidden"
+  }, /*#__PURE__*/React.createElement("ul", {
+    className: "divide-y divide-stone-100"
+  }, visitsFiltered.slice(0, visitsVisibleCount).map(v => {
+    const c = v.customer;
+    const k = v.call;
+    const isOverdue = v.status === 'pending' && v.daysSince >= 21;
+    return /*#__PURE__*/React.createElement("li", {
+      key: c.id,
+      className: "p-3"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "flex items-start gap-3 mb-2"
+    }, /*#__PURE__*/React.createElement(Avatar, {
+      name: c.name
+    }), /*#__PURE__*/React.createElement("button", {
+      onClick: () => onOpenCustomer(c.id),
+      className: "flex-1 min-w-0 text-left"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "font-medium text-stone-900 truncate"
+    }, c.name), /*#__PURE__*/React.createElement("div", {
+      className: "text-xs text-stone-500 flex items-center gap-1.5 flex-wrap mt-0.5"
+    }, /*#__PURE__*/React.createElement("span", {
+      className: "font-mono-num"
+    }, c.phone), /*#__PURE__*/React.createElement("span", {
+      className: "text-stone-300"
+    }, "\xB7"), /*#__PURE__*/React.createElement("span", null, "Promised ", v.daysSince === 0 ? 'today' : `${v.daysSince}d ago`), k.scheduledDate && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
+      className: "text-stone-300"
+    }, "\xB7"), /*#__PURE__*/React.createElement("span", null, "for ", new Date(k.scheduledDate + 'T00:00:00').toLocaleDateString('en-IN', {
+      day: 'numeric',
+      month: 'short'
+    })))), k.notes && /*#__PURE__*/React.createElement("div", {
+      className: "text-xs text-stone-600 italic mt-1"
+    }, "\"", k.notes, "\"")), /*#__PURE__*/React.createElement("div", {
+      className: "shrink-0"
+    }, v.status === 'came' && /*#__PURE__*/React.createElement("span", {
+      className: "text-[11px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300 inline-flex items-center gap-1"
+    }, /*#__PURE__*/React.createElement(Check, {
+      size: 10
+    }), " Visited"), v.status === 'no_show' && /*#__PURE__*/React.createElement("span", {
+      className: "text-[11px] px-2 py-0.5 rounded-full bg-rose-100 text-rose-900 border border-rose-300 inline-flex items-center gap-1"
+    }, /*#__PURE__*/React.createElement(X, {
+      size: 10
+    }), " No-show"), v.status === 'pending' && /*#__PURE__*/React.createElement("span", {
+      className: `text-[11px] px-2 py-0.5 rounded-full inline-flex items-center gap-1 ${isOverdue ? 'bg-amber-200 text-amber-900 border border-amber-400' : 'bg-amber-50 text-amber-800 border border-amber-200'}`
+    }, /*#__PURE__*/React.createElement(Clock, {
+      size: 10
+    }), " ", isOverdue ? `Overdue ${v.daysSince}d` : 'Pending'))), v.status === 'pending' && /*#__PURE__*/React.createElement("div", {
+      className: "flex gap-1.5 mt-2"
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: () => onUpdateCall(k.id, {
+        visitStatus: 'came'
+      }),
+      className: "flex-1 py-2 text-xs font-medium rounded-md bg-emerald-600 text-white hover:bg-emerald-700 inline-flex items-center justify-center gap-1.5 transition"
+    }, /*#__PURE__*/React.createElement(Check, {
+      size: 12
+    }), " Aaye (Visited)"), /*#__PURE__*/React.createElement("button", {
+      onClick: () => onUpdateCall(k.id, {
+        visitStatus: 'no_show'
+      }),
+      className: "flex-1 py-2 text-xs font-medium rounded-md bg-white border border-rose-300 text-rose-700 hover:bg-rose-50 inline-flex items-center justify-center gap-1.5 transition"
+    }, /*#__PURE__*/React.createElement(X, {
+      size: 12
+    }), " Nahi aaye (No-show)"), /*#__PURE__*/React.createElement("a", {
+      href: `tel:${phoneForLink(c.phone)}`,
+      className: "px-3 py-2 text-xs font-medium rounded-md bg-stone-900 text-amber-50 hover:bg-stone-800 inline-flex items-center justify-center gap-1.5 transition"
+    }, /*#__PURE__*/React.createElement(Phone, {
+      size: 12
+    }))), v.status !== 'pending' && /*#__PURE__*/React.createElement("div", {
+      className: "flex gap-1.5 mt-2"
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: () => onUpdateCall(k.id, {
+        visitStatus: null
+      }),
+      className: "text-[11px] text-stone-500 hover:text-stone-700 underline"
+    }, "\u21BA Reset to pending")));
+  })), visitsFiltered.length > visitsVisibleCount && /*#__PURE__*/React.createElement("div", {
+    className: "px-4 py-4 bg-stone-50 border-t border-stone-200 text-center"
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => setVisitsVisibleCount(c => c + 50),
+    className: "text-sm font-medium text-stone-700 hover:text-stone-900 inline-flex items-center gap-1.5"
+  }, "Show 50 more ", /*#__PURE__*/React.createElement(ChevronRight, {
+    size: 14
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "text-[10px] text-stone-400 mt-1"
+  }, "Showing ", visitsVisibleCount, " of ", visitsFiltered.length)))), viewMode === 'customers' && /*#__PURE__*/React.createElement(React.Fragment, null, filtered.length === 0 ? /*#__PURE__*/React.createElement("div", {
     className: "bg-white border border-stone-200 rounded-lg py-12 text-center text-stone-500 text-sm"
   }, customers.length === 0 ? 'No customers yet.' : 'No customers match this filter.') : /*#__PURE__*/React.createElement("div", {
     className: "bg-white border border-stone-200 rounded-lg overflow-hidden"
@@ -2995,9 +3408,9 @@ function CallsView({
       className: "flex-1 min-w-[70px] py-2 text-xs font-medium rounded-md border bg-sky-50 text-sky-800 hover:bg-sky-100 border-sky-200 flex items-center justify-center gap-1.5 transition disabled:opacity-50 disabled:cursor-not-allowed"
     }, savingKey === c.id + '|video_call' ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
       className: "inline-block h-3 w-3 border-2 border-sky-700 border-t-transparent rounded-full animate-spin"
-    }), " Saving") : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(Video, {
+    }), " Saving") : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(MessageCircle, {
       size: 13
-    }), " Video")), /*#__PURE__*/React.createElement("button", {
+    }), " WhatsApp")), /*#__PURE__*/React.createElement("button", {
       onClick: () => quickLog(c.id, 'not_confirm'),
       disabled: savingKey === c.id + '|not_confirm',
       className: "flex-1 min-w-[80px] py-2 text-xs font-medium rounded-md border bg-violet-50 text-violet-800 hover:bg-violet-100 border-violet-200 flex items-center justify-center gap-1.5 transition disabled:opacity-50 disabled:cursor-not-allowed",
@@ -3034,9 +3447,9 @@ function CallsView({
       className: "mt-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-md"
     }, /*#__PURE__*/React.createElement("div", {
       className: "text-[11px] font-medium text-amber-900 mb-1.5 flex items-center gap-1.5"
-    }, /*#__PURE__*/React.createElement(Video, {
+    }, /*#__PURE__*/React.createElement(MessageCircle, {
       size: 12
-    }), " Video call done? Did they buy?"), /*#__PURE__*/React.createElement("div", {
+    }), " WhatsApp sent \u2014 did they buy?"), /*#__PURE__*/React.createElement("div", {
       className: "flex gap-1.5"
     }, /*#__PURE__*/React.createElement("button", {
       onClick: () => onUpdateCall(lc.id, {
@@ -3538,7 +3951,7 @@ function QuickAddModal({
   const matches = useMemo(() => {
     const q = normalizePhone(phone);
     if (!q) return [];
-    return customers.filter(c => normalizePhone(c.phone).includes(q) || c.name.toLowerCase().includes(phone.toLowerCase())).slice(0, 5);
+    return customers.filter(c => normalizePhone(c.phone).includes(q) || (c.name || '').toLowerCase().includes(phone.toLowerCase())).slice(0, 5);
   }, [phone, customers]);
   return /*#__PURE__*/React.createElement(ModalShell, {
     title: "Quick add purchase",
@@ -3705,7 +4118,7 @@ function CallFormModal({
     notes: ''
   });
   const showScheduled = form.outcome === 'visiting' || form.outcome === 'video_call';
-  const scheduledLabel = form.outcome === 'video_call' ? 'Video call on' : 'Coming on';
+  const scheduledLabel = form.outcome === 'video_call' ? 'WhatsApp sent on' : 'Coming on';
   return /*#__PURE__*/React.createElement(ModalShell, {
     title: "Log call",
     onClose: onClose
