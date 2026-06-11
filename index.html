@@ -397,6 +397,12 @@ window.storage = {
   }
 };
 
+function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
+import { Users, ShoppingBag, Trophy, LayoutDashboard, Settings as SettingsIcon, Plus, Search, X, Phone, Calendar, Edit2, Trash2, TrendingUp, MessageCircle, Download, Upload, Cake, Heart, Tag as TagIcon, ChevronRight, AlertCircle, Star, ArrowLeft, Check, MoreVertical, Award, Activity, IndianRupee, FileText, Sparkles, Zap, Store, Video, PhoneOff, PhoneCall, Clock, Eye, EyeOff, LogOut, Lock } from 'lucide-react';
+
+function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
+import { Users, ShoppingBag, Trophy, LayoutDashboard, Settings as SettingsIcon, Plus, Search, X, Phone, Calendar, Edit2, Trash2, TrendingUp, MessageCircle, Download, Upload, Cake, Heart, Tag as TagIcon, ChevronRight, AlertCircle, Star, ArrowLeft, Check, MoreVertical, Award, Activity, IndianRupee, FileText, Sparkles, Zap, Store, Video, PhoneOff, PhoneCall, Clock, Eye, EyeOff, LogOut, Lock } from 'lucide-react';
+
 // ============ CONSTANTS ============
 const STORAGE_KEYS = {
   CUSTOMERS: 'customers',
@@ -527,20 +533,22 @@ const getCallDisplay = call => {
 
 // Cooldown — after a call with this outcome, customer is hidden from "All" for these days
 const COOLDOWN_DAYS = {
-  visiting: 21,
-  visiting_came: 60,
-  // They came & bought — give them space like a sold customer
+  visiting: 30,
+  // Will visit — give 30 days to come
+  visiting_came: 40,
+  // They came & bought — 40 days space
   visiting_no_show: 30,
   // They didn't show — try again next month
-  video_pending: 10,
-  video_selected: 60,
-  // Sold — treat like a regular post-sale customer
+  video_pending: 0,
+  // WhatsApp sent — STAY in queue until marked Sold/Failed
+  video_selected: 50,
+  // Sold via WhatsApp — 50 days space
   video_not_selected: 30,
-  // Video failed — retry after a month
-  not_confirm: 5,
-  // Customer needs time to decide — retry after a few days
-  busy: 1,
-  // Customer was busy, call back tomorrow
+  // WhatsApp failed — retry after a month
+  not_confirm: 15,
+  // Customer needs time to decide — 15 days
+  busy: 5,
+  // Customer was busy — call back in 5 days
   no_answer: 3 // Quick retry if they didn't pick up
 };
 const callCooldownDays = call => {
@@ -559,12 +567,14 @@ const callCooldownDays = call => {
 };
 
 // When user provided a scheduledDate (e.g. "coming Saturday"), prefer day-after-scheduled.
-// IMPORTANT: only honor scheduledDate while the call is STILL pending — once a video call is
-// marked done (sold/no-sale), use the post-completion cooldown days instead.
+// IMPORTANT: only honor scheduledDate while the call is STILL pending — once visit is
+// marked came/no-show or video is marked sold/no-sale, use the post-completion cooldown days.
 const cooldownEndDate = call => {
   if (!call) return null;
-  const isPendingVisitOrVideo = call.outcome === 'visiting' || call.outcome === 'video_call' && !call.videoStatus;
-  if (call.scheduledDate && isPendingVisitOrVideo) {
+  const isPendingVideo = call.outcome === 'video_call' && !call.videoStatus;
+  const isPendingVisit = call.outcome === 'visiting' && !call.visitStatus;
+  const isPending = isPendingVideo || isPendingVisit;
+  if (call.scheduledDate && isPending) {
     const sd = parseLocalYMD(call.scheduledDate);
     if (sd) {
       sd.setDate(sd.getDate() + 1);
@@ -711,150 +721,7 @@ const inferCategory = (itemName, brand) => {
 };
 
 // ============ ROOT ============
-
-function AccountSection({
-  onLogout
-}) {
-  const [email, setEmail] = useState('');
-  const [showChangePw, setShowChangePw] = useState(false);
-  const [newUsername, setNewUsername] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPw, setConfirmPw] = useState('');
-  const [pwError, setPwError] = useState('');
-  const [pwSaving, setPwSaving] = useState(false);
-  const [pwSuccess, setPwSuccess] = useState('');
-  useEffect(() => {
-    window._supabase.auth.getUser().then(({
-      data
-    }) => {
-      const em = data.user?.email || '';
-      setEmail(em);
-      // Pre-fill username field with current username (without @palmens.local)
-      const display = em.endsWith('@palmens.local') ? em.slice(0, -14) : em;
-      setNewUsername(display);
-    });
-  }, []);
-
-  // Show just "admin" instead of "admin@palmens.local"
-  const displayName = email.endsWith('@palmens.local') ? email.slice(0, -14) : email;
-  const saveChanges = async () => {
-    setPwError('');
-    setPwSuccess('');
-    const userInput = newUsername.trim().toLowerCase();
-    if (!userInput) {
-      setPwError('Username cannot be empty');
-      return;
-    }
-    if (newPassword && newPassword.length < 6) {
-      setPwError('Password must be at least 6 characters');
-      return;
-    }
-    if (newPassword !== confirmPw) {
-      setPwError('Passwords do not match');
-      return;
-    }
-    if (!newPassword && userInput === displayName) {
-      setPwError('Nothing to change');
-      return;
-    }
-    setPwSaving(true);
-    try {
-      const updates = {};
-      const newEmail = userInput.includes('@') ? userInput : userInput + '@palmens.local';
-      if (newEmail !== email) updates.email = newEmail;
-      if (newPassword) updates.password = newPassword;
-      const {
-        error
-      } = await window._supabase.auth.updateUser(updates);
-      if (error) {
-        setPwError(error.message || 'Failed to update');
-      } else {
-        setPwSuccess('Saved! ' + (newPassword ? 'Login again with the new password.' : 'Username updated.'));
-        setNewPassword('');
-        setConfirmPw('');
-        if (newPassword) {
-          // After password change, force re-login
-          setTimeout(() => onLogout(), 2000);
-        } else {
-          // Refresh email display
-          setEmail(newEmail);
-        }
-      }
-    } catch (e) {
-      setPwError('Network error: ' + (e.message || e));
-    } finally {
-      setPwSaving(false);
-    }
-  };
-  return /*#__PURE__*/React.createElement("section", {
-    className: "bg-white border border-stone-200 rounded-lg p-5 mb-4"
-  }, /*#__PURE__*/React.createElement("h3", {
-    className: "font-display text-lg text-stone-900 mb-1"
-  }, "Account"), /*#__PURE__*/React.createElement("p", {
-    className: "text-sm text-stone-600 mb-3"
-  }, "Logged in as ", /*#__PURE__*/React.createElement("strong", null, displayName || '...'), "."), /*#__PURE__*/React.createElement("div", {
-    className: "flex flex-wrap gap-2 mb-3"
-  }, /*#__PURE__*/React.createElement("button", {
-    onClick: onLogout,
-    className: "px-4 py-2 bg-stone-50 border border-stone-200 rounded-md text-sm font-medium hover:bg-stone-100 inline-flex items-center gap-2"
-  }, /*#__PURE__*/React.createElement(LogOut, {
-    size: 14
-  }), " Logout"), /*#__PURE__*/React.createElement("button", {
-    onClick: () => {
-      setShowChangePw(s => !s);
-      setPwError('');
-      setPwSuccess('');
-    },
-    className: "px-4 py-2 bg-white border border-stone-200 rounded-md text-sm font-medium hover:bg-stone-50 text-stone-700 inline-flex items-center gap-2"
-  }, /*#__PURE__*/React.createElement(Lock, {
-    size: 14
-  }), " ", showChangePw ? 'Cancel' : 'Change username / password')), showChangePw && /*#__PURE__*/React.createElement("div", {
-    className: "mt-3 pt-4 border-t border-stone-200 space-y-3"
-  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-xs uppercase tracking-wider text-stone-600 mb-1"
-  }, "Username"), /*#__PURE__*/React.createElement("input", {
-    value: newUsername,
-    onChange: e => {
-      setNewUsername(e.target.value);
-      setPwError('');
-    },
-    className: "w-full px-3 py-2 bg-white border border-stone-200 rounded-md text-sm focus:outline-none focus:border-stone-500"
-  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-xs uppercase tracking-wider text-stone-600 mb-1"
-  }, "New password (leave empty to keep current)"), /*#__PURE__*/React.createElement("input", {
-    type: "password",
-    value: newPassword,
-    onChange: e => {
-      setNewPassword(e.target.value);
-      setPwError('');
-    },
-    placeholder: "At least 6 characters",
-    className: "w-full px-3 py-2 bg-white border border-stone-200 rounded-md text-sm focus:outline-none focus:border-stone-500"
-  })), newPassword && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-xs uppercase tracking-wider text-stone-600 mb-1"
-  }, "Confirm new password"), /*#__PURE__*/React.createElement("input", {
-    type: "password",
-    value: confirmPw,
-    onChange: e => {
-      setConfirmPw(e.target.value);
-      setPwError('');
-    },
-    className: "w-full px-3 py-2 bg-white border border-stone-200 rounded-md text-sm focus:outline-none focus:border-stone-500"
-  })), pwError && /*#__PURE__*/React.createElement("div", {
-    className: "text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded-md px-3 py-2 flex items-center gap-2"
-  }, /*#__PURE__*/React.createElement(AlertCircle, {
-    size: 14
-  }), " ", pwError), pwSuccess && /*#__PURE__*/React.createElement("div", {
-    className: "text-sm text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-md px-3 py-2 flex items-center gap-2"
-  }, /*#__PURE__*/React.createElement(Check, {
-    size: 14
-  }), " ", pwSuccess), /*#__PURE__*/React.createElement("button", {
-    onClick: saveChanges,
-    disabled: pwSaving,
-    className: "w-full py-2.5 bg-stone-900 text-amber-50 rounded-md text-sm font-medium hover:bg-stone-800 disabled:opacity-60"
-  }, pwSaving ? 'Saving…' : 'Save changes')));
-}
-function App() {
+export default function App() {
   const [customers, setCustomers] = useState([]);
   const [purchases, setPurchases] = useState([]);
   const [calls, setCalls] = useState([]);
@@ -880,46 +747,36 @@ function App() {
   // ===== Load persisted data =====
   useEffect(() => {
     (async () => {
-      const {
-        data: {
-          session
-        }
-      } = await window._supabase.auth.getSession();
-      if (!session) {
-        setIsAuthed(false);
-        setLoading(false);
-        return;
-      }
-      setIsAuthed(true);
       try {
         const c = await window.storage.get(STORAGE_KEYS.CUSTOMERS);
         if (c?.value) setCustomers(JSON.parse(c.value));
-      } catch (e) {}
+      } catch (e) {/* key not found is fine */}
       try {
         const p = await window.storage.get(STORAGE_KEYS.PURCHASES);
         if (p?.value) setPurchases(JSON.parse(p.value));
-      } catch (e) {}
+      } catch (e) {/* key not found is fine */}
       try {
         const k = await window.storage.get(STORAGE_KEYS.CALLS);
         if (k?.value) setCalls(JSON.parse(k.value));
-      } catch (e) {}
+      } catch (e) {/* key not found is fine */}
+      try {
+        const a = await window.storage.get(STORAGE_KEYS.AUTH);
+        if (a?.value === 'authed') setIsAuthed(true);
+      } catch (e) {/* not logged in */}
       setLoading(false);
     })();
-    const {
-      data: {
-        subscription
-      }
-    } = window._supabase.auth.onAuthStateChange((_e, session) => {
-      setIsAuthed(!!session);
-    });
-    return () => subscription.unsubscribe();
   }, []);
   const handleLogin = async () => {
     setIsAuthed(true);
+    try {
+      await window.storage.set(STORAGE_KEYS.AUTH, 'authed');
+    } catch (e) {}
   };
   const handleLogout = async () => {
-    await window._supabase.auth.signOut();
     setIsAuthed(false);
+    try {
+      await window.storage.delete(STORAGE_KEYS.AUTH);
+    } catch (e) {}
   };
 
   // ===== Toast =====
@@ -1431,6 +1288,10 @@ function App() {
     });
   }, [customers, stats]);
   const selectedCustomer = enriched.find(c => c.id === selectedCustomerId);
+
+  // Memoize purchases/calls for selected customer (avoid re-filtering on every render)
+  const selectedCustomerPurchases = useMemo(() => selectedCustomer ? purchases.filter(p => p.customerId === selectedCustomer.id) : [], [selectedCustomer?.id, purchases]);
+  const selectedCustomerCalls = useMemo(() => selectedCustomer ? calls.filter(k => k.customerId === selectedCustomer.id) : [], [selectedCustomer?.id, calls]);
   if (loading) {
     return /*#__PURE__*/React.createElement(LoadingScreen, null);
   }
@@ -1473,8 +1334,8 @@ function App() {
     onQuickAddPurchase: () => setQuickAddModal(true)
   }), view === 'customer-detail' && selectedCustomer && /*#__PURE__*/React.createElement(CustomerDetail, {
     customer: selectedCustomer,
-    purchases: purchases.filter(p => p.customerId === selectedCustomer.id),
-    calls: calls.filter(k => k.customerId === selectedCustomer.id),
+    purchases: selectedCustomerPurchases,
+    calls: selectedCustomerCalls,
     onBack: () => setView('customers'),
     onEdit: () => setCustomerModal({
       mode: 'edit',
@@ -1519,6 +1380,7 @@ function App() {
   }), view === 'settings' && /*#__PURE__*/React.createElement(SettingsView, {
     customers: customers,
     purchases: purchases,
+    calls: calls,
     enriched: enriched,
     onTriggerImport: triggerImport,
     onLogout: () => {
@@ -1679,20 +1541,13 @@ function LoginScreen({
     if (attempting) return;
     setAttempting(true);
     setError('');
-    // User can type just "admin" - we auto-append @palmens.local for Supabase
-    const raw = username.trim().toLowerCase();
-    const email = raw.includes('@') ? raw : raw + '@palmens.local';
-    const {
-      error: err
-    } = await window._supabase.auth.signInWithPassword({
-      email,
-      password
-    });
-    if (err) {
+    // Small delay so failed attempts feel deliberate (not instant spam)
+    await new Promise(r => setTimeout(r, 250));
+    if (username.trim() === AUTH.username && password === AUTH.password) {
+      onLogin();
+    } else {
       setError('Wrong username or password');
       setAttempting(false);
-    } else {
-      onLogin();
     }
   };
   const onKeyDown = e => {
@@ -2757,7 +2612,22 @@ function CallsView({
       if (filter === 'called_today') return lc && lc.date === todayYmd;
       return callState(c) === filter;
     });
-    list.sort((a, b) => (b.totalSpent || 0) - (a.totalSpent || 0));
+    // Smart sort: WhatsApp pending customers come FIRST (they need follow-up most),
+    // then by total spent (top spenders next), then by created date
+    list.sort((a, b) => {
+      const aLc = callsByCustomer[a.id]?.[0];
+      const bLc = callsByCustomer[b.id]?.[0];
+      const aIsPending = aLc?.outcome === 'video_call' && !aLc.videoStatus;
+      const bIsPending = bLc?.outcome === 'video_call' && !bLc.videoStatus;
+      // Pending WhatsApp first
+      if (aIsPending && !bIsPending) return -1;
+      if (!aIsPending && bIsPending) return 1;
+      // Then by total spent
+      const spentDiff = (b.totalSpent || 0) - (a.totalSpent || 0);
+      if (spentDiff !== 0) return spentDiff;
+      // Tie-breaker: created date (newer first)
+      return (b.createdAt || 0) - (a.createdAt || 0);
+    });
     return list;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customers, searchDebounced, filter, callsByCustomer, todayYmd]);
@@ -3363,6 +3233,7 @@ function CallsView({
     const Icon = display?.icon;
     const telLink = `tel:${phoneForLink(c.phone)}`;
     const isPendingVideo = lc && lc.outcome === 'video_call' && !lc.videoStatus;
+    const isPendingVisit = lc && lc.outcome === 'visiting' && !lc.visitStatus;
     return /*#__PURE__*/React.createElement("li", {
       key: c.id,
       className: "px-4 py-3"
@@ -3465,7 +3336,29 @@ function CallsView({
       className: "flex-1 py-1.5 text-xs font-medium rounded-md bg-white border border-rose-300 text-rose-700 hover:bg-rose-50 inline-flex items-center justify-center gap-1.5 transition"
     }, /*#__PURE__*/React.createElement(X, {
       size: 12
-    }), " No, didn't buy"))));
+    }), " No, didn't buy"))), isPendingVisit && /*#__PURE__*/React.createElement("div", {
+      className: "mt-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-md"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "text-[11px] font-medium text-amber-900 mb-1.5 flex items-center gap-1.5"
+    }, /*#__PURE__*/React.createElement(Store, {
+      size: 12
+    }), " Did they visit the shop?"), /*#__PURE__*/React.createElement("div", {
+      className: "flex gap-1.5"
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: () => onUpdateCall(lc.id, {
+        visitStatus: 'came'
+      }),
+      className: "flex-1 py-1.5 text-xs font-medium rounded-md bg-emerald-600 text-white hover:bg-emerald-700 inline-flex items-center justify-center gap-1.5 transition"
+    }, /*#__PURE__*/React.createElement(Check, {
+      size: 12
+    }), " Yes, visited"), /*#__PURE__*/React.createElement("button", {
+      onClick: () => onUpdateCall(lc.id, {
+        visitStatus: 'no_show'
+      }),
+      className: "flex-1 py-1.5 text-xs font-medium rounded-md bg-white border border-rose-300 text-rose-700 hover:bg-rose-50 inline-flex items-center justify-center gap-1.5 transition"
+    }, /*#__PURE__*/React.createElement(X, {
+      size: 12
+    }), " No-show"))));
   })), filtered.length > visibleCount && /*#__PURE__*/React.createElement("div", {
     className: "px-4 py-4 bg-stone-50 border-t border-stone-200 text-center"
   }, /*#__PURE__*/React.createElement("button", {
@@ -3482,6 +3375,7 @@ function CallsView({
 function SettingsView({
   customers,
   purchases,
+  calls,
   enriched,
   onTriggerImport,
   onLogout,
@@ -3653,16 +3547,56 @@ function SettingsView({
   }, /*#__PURE__*/React.createElement("h3", {
     className: "font-display text-lg text-stone-900 mb-3"
   }, "Storage"), /*#__PURE__*/React.createElement("div", {
-    className: "grid grid-cols-2 gap-3 text-sm"
-  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
-    className: "text-stone-500"
-  }, "Customers:"), " ", /*#__PURE__*/React.createElement("strong", null, customers.length)), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
-    className: "text-stone-500"
-  }, "Sales records:"), " ", /*#__PURE__*/React.createElement("strong", null, purchases.length))), /*#__PURE__*/React.createElement("p", {
-    className: "text-xs text-stone-500 mt-3"
-  }, "Data is saved permanently on this device, even after refresh.")), /*#__PURE__*/React.createElement(AccountSection, {
-    onLogout: onLogout
-  }), /*#__PURE__*/React.createElement("section", {
+    className: "grid grid-cols-3 gap-3 text-sm"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "bg-stone-50 rounded-md p-3"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "text-[10px] uppercase tracking-wider text-stone-500 mb-1"
+  }, "Customers"), /*#__PURE__*/React.createElement("div", {
+    className: "text-2xl font-display text-stone-900"
+  }, customers.length.toLocaleString('en-IN'))), /*#__PURE__*/React.createElement("div", {
+    className: "bg-stone-50 rounded-md p-3"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "text-[10px] uppercase tracking-wider text-stone-500 mb-1"
+  }, "Sales records"), /*#__PURE__*/React.createElement("div", {
+    className: "text-2xl font-display text-stone-900"
+  }, purchases.length.toLocaleString('en-IN'))), /*#__PURE__*/React.createElement("div", {
+    className: "bg-stone-50 rounded-md p-3"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "text-[10px] uppercase tracking-wider text-stone-500 mb-1"
+  }, "Call logs"), /*#__PURE__*/React.createElement("div", {
+    className: "text-2xl font-display text-stone-900"
+  }, calls.length.toLocaleString('en-IN')))), (() => {
+    // Estimate storage usage
+    const sizeKB = Math.round((JSON.stringify(customers).length + JSON.stringify(purchases).length + JSON.stringify(calls).length) / 1024);
+    const sizeMB = (sizeKB / 1024).toFixed(2);
+    const isSmall = sizeKB < 500;
+    const isMedium = sizeKB < 5000;
+    return /*#__PURE__*/React.createElement("div", {
+      className: "mt-3 px-3 py-2 bg-stone-50 rounded-md text-xs"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "flex items-center justify-between flex-wrap gap-2"
+    }, /*#__PURE__*/React.createElement("span", {
+      className: "text-stone-600"
+    }, "Data size: ", /*#__PURE__*/React.createElement("strong", {
+      className: "text-stone-900 font-mono-num"
+    }, sizeKB < 1024 ? `${sizeKB} KB` : `${sizeMB} MB`)), /*#__PURE__*/React.createElement("span", {
+      className: `px-2 py-0.5 rounded-full text-[10px] font-medium ${isSmall ? 'bg-emerald-100 text-emerald-800' : isMedium ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800'}`
+    }, isSmall ? '✓ Smooth' : isMedium ? '⚠ Growing' : '⚠ Heavy')), /*#__PURE__*/React.createElement("p", {
+      className: "text-[11px] text-stone-500 mt-1.5"
+    }, "Stored in cloud (Supabase). Smooth performance up to ~10,000 customers. Backed up automatically."));
+  })()), /*#__PURE__*/React.createElement("section", {
+    className: "bg-white border border-stone-200 rounded-lg p-5 mb-4"
+  }, /*#__PURE__*/React.createElement("h3", {
+    className: "font-display text-lg text-stone-900 mb-1"
+  }, "Account"), /*#__PURE__*/React.createElement("p", {
+    className: "text-sm text-stone-600 mb-3"
+  }, "Logged in as ", /*#__PURE__*/React.createElement("strong", null, AUTH.username), "."), /*#__PURE__*/React.createElement("button", {
+    onClick: onLogout,
+    className: "px-4 py-2 bg-stone-50 border border-stone-200 rounded-md text-sm font-medium hover:bg-stone-100 inline-flex items-center gap-2"
+  }, /*#__PURE__*/React.createElement(LogOut, {
+    size: 14
+  }), " Logout")), /*#__PURE__*/React.createElement("section", {
     className: "bg-white border border-rose-200 rounded-lg p-5"
   }, /*#__PURE__*/React.createElement("h3", {
     className: "font-display text-lg text-rose-900 mb-1"
