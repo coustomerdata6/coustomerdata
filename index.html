@@ -411,7 +411,7 @@ const STORAGE_KEYS = {
 };
 const AUTH = {
   username: 'admin',
-  password: 'jaimatadi1'
+  password: 'jaimatadi@1'
 };
 const CATEGORIES = ['Shirt', 'Pant', 'Suit', 'Sherwani', 'Kurta', 'T-Shirt', 'Jeans', 'Blazer', 'Indo-Western', 'Accessories', 'Other'];
 const PAYMENT_MODES = ['Cash', 'UPI', 'Card', 'Other'];
@@ -1600,7 +1600,7 @@ function LoginScreen({
     setError('');
     // Small delay so failed attempts feel deliberate (not instant spam)
     await new Promise(r => setTimeout(r, 250));
-    if (username.trim() === AUTH.username && password === AUTH.password) {
+    if (username.trim().toLowerCase() === AUTH.username.toLowerCase() && password === AUTH.password) {
       onLogin();
     } else {
       setError('Wrong username or password');
