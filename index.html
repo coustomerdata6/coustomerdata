@@ -747,32 +747,38 @@ export default function App() {
   useEffect(() => {
     let cancelled = false;
 
-    // Safety timeout — if anything hangs for >4 seconds, force show login screen
+    // Safety timeout — if anything hangs for >5 seconds, force show login screen
     const safetyTimer = setTimeout(() => {
       if (!cancelled) {
         console.warn('Storage load took too long, showing login screen');
         setLoading(false);
       }
-    }, 4000);
+    }, 5000);
     (async () => {
       try {
-        // Check auth first (fast, just one network call)
+        // STEP 1: Check Supabase session DIRECTLY (works across devices)
         let authed = false;
         try {
-          const a = await window.storage.get(STORAGE_KEYS.AUTH);
-          if (a?.value === 'authed') {
-            authed = true;
-            if (!cancelled) setIsAuthed(true);
+          if (window._supabase) {
+            const {
+              data: {
+                session
+              }
+            } = await window._supabase.auth.getSession();
+            if (session && session.user) {
+              authed = true;
+              if (!cancelled) setIsAuthed(true);
+            }
           }
-        } catch (e) {/* not logged in is fine */}
+        } catch (e) {/* not signed in is fine */}
 
-        // If not authed, show login screen right away
+        // If not signed in to Supabase, show login screen right away
         if (!authed) {
           if (!cancelled) setLoading(false);
           return;
         }
 
-        // Authed — load data in parallel (3x faster than sequential)
+        // STEP 2: Signed in — load data in parallel
         const [cRes, pRes, kRes] = await Promise.all([window.storage.get(STORAGE_KEYS.CUSTOMERS).catch(() => null), window.storage.get(STORAGE_KEYS.PURCHASES).catch(() => null), window.storage.get(STORAGE_KEYS.CALLS).catch(() => null)]);
         if (cancelled) return;
         try {
@@ -814,16 +820,21 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthed]);
   const handleLogin = async () => {
+    // LoginScreen has already signed in to Supabase before calling this.
+    // Just mark as authed locally.
     setIsAuthed(true);
-    try {
-      await window.storage.set(STORAGE_KEYS.AUTH, 'authed');
-    } catch (e) {}
   };
   const handleLogout = async () => {
-    setIsAuthed(false);
     try {
-      await window.storage.delete(STORAGE_KEYS.AUTH);
+      if (window._supabase) await window._supabase.auth.signOut();
     } catch (e) {}
+    // Clear local data so next user sees fresh screen
+    setIsAuthed(false);
+    setCustomers([]);
+    setPurchases([]);
+    setCalls([]);
+    setView('dashboard');
+    setSelectedCustomerId(null);
   };
 
   // ===== Toast =====
@@ -1598,12 +1609,43 @@ function LoginScreen({
     if (attempting) return;
     setAttempting(true);
     setError('');
-    // Small delay so failed attempts feel deliberate (not instant spam)
     await new Promise(r => setTimeout(r, 250));
-    if (username.trim().toLowerCase() === AUTH.username.toLowerCase() && password === AUTH.password) {
-      onLogin();
-    } else {
+
+    // First check hardcoded credentials match
+    const u = username.trim().toLowerCase();
+    if (u !== AUTH.username.toLowerCase() || password !== AUTH.password) {
       setError('Wrong username or password');
+      setAttempting(false);
+      return;
+    }
+
+    // Then sign in to Supabase so storage works
+    try {
+      if (!window._supabase) {
+        throw new Error('Database not configured. Please contact admin.');
+      }
+      const email = `${AUTH.username}@palmens.local`;
+      const {
+        error: authError
+      } = await window._supabase.auth.signInWithPassword({
+        email,
+        password: AUTH.password
+      });
+      if (authError) {
+        // Supabase errors might be technical — translate to friendly message
+        const msg = authError.message || '';
+        if (msg.toLowerCase().includes('invalid') || msg.toLowerCase().includes('credentials')) {
+          throw new Error('Database password mismatch. App password and database password differ. Contact admin.');
+        }
+        if (msg.toLowerCase().includes('network') || msg.toLowerCase().includes('fetch')) {
+          throw new Error('No internet connection. Please check your connection.');
+        }
+        throw new Error('Database sign-in failed: ' + msg);
+      }
+      // Success — pass to parent
+      onLogin();
+    } catch (e) {
+      setError(e.message || 'Login failed. Check your internet connection.');
       setAttempting(false);
     }
   };
