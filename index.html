@@ -538,8 +538,8 @@ const COOLDOWN_DAYS = {
   // They came & bought — 40 days space
   visiting_no_show: 30,
   // They didn't show — try again next month
-  video_pending: 0,
-  // WhatsApp sent — STAY in queue until marked Sold/Failed
+  video_pending: 7,
+  // WhatsApp sent — wait 7 days for customer response, then follow up
   video_selected: 50,
   // Sold via WhatsApp — 50 days space
   video_not_selected: 30,
@@ -1611,36 +1611,47 @@ function LoginScreen({
     setError('');
     await new Promise(r => setTimeout(r, 250));
 
-    // First check hardcoded credentials match
-    const u = username.trim().toLowerCase();
-    if (u !== AUTH.username.toLowerCase() || password !== AUTH.password) {
-      setError('Wrong username or password');
+    // Basic validation
+    if (!username.trim()) {
+      setError('Please enter username');
+      setAttempting(false);
+      return;
+    }
+    if (!password) {
+      setError('Please enter password');
       setAttempting(false);
       return;
     }
 
-    // Then sign in to Supabase so storage works
+    // Username must match AUTH.username (case-insensitive)
+    const u = username.trim().toLowerCase();
+    if (u !== AUTH.username.toLowerCase()) {
+      setError('Wrong username');
+      setAttempting(false);
+      return;
+    }
+
+    // Send password DIRECTLY to Supabase — whatever password you set there will work
     try {
       if (!window._supabase) {
-        throw new Error('Database not configured. Please contact admin.');
+        throw new Error('Database not configured. Contact admin.');
       }
       const email = `${AUTH.username}@palmens.local`;
       const {
         error: authError
       } = await window._supabase.auth.signInWithPassword({
         email,
-        password: AUTH.password
+        password: password // ← user's typed password, not hardcoded
       });
       if (authError) {
-        // Supabase errors might be technical — translate to friendly message
-        const msg = authError.message || '';
-        if (msg.toLowerCase().includes('invalid') || msg.toLowerCase().includes('credentials')) {
-          throw new Error('Database password mismatch. App password and database password differ. Contact admin.');
+        const msg = (authError.message || '').toLowerCase();
+        if (msg.includes('invalid') || msg.includes('credentials')) {
+          throw new Error('Wrong password. Try the password you set in Supabase.');
         }
-        if (msg.toLowerCase().includes('network') || msg.toLowerCase().includes('fetch')) {
-          throw new Error('No internet connection. Please check your connection.');
+        if (msg.includes('network') || msg.includes('fetch') || msg.includes('failed to fetch')) {
+          throw new Error('No internet. Check your connection.');
         }
-        throw new Error('Database sign-in failed: ' + msg);
+        throw new Error(authError.message || 'Sign-in failed');
       }
       // Success — pass to parent
       onLogin();
@@ -2711,19 +2722,28 @@ function CallsView({
       if (filter === 'called_today') return lc && lc.date === todayYmd;
       return callState(c) === filter;
     });
-    // Smart sort: WhatsApp pending customers come FIRST (they need follow-up most),
-    // then by total spent (top spenders next), then by created date
+    // Smart sort priority order:
+    // 1. Never called (fresh leads — call these first)
+    // 2. Returning customers (already had a call, cooldown done — including WhatsApp pending after 7 days)
+    // Within each group: by total spent, then by created date (newest first)
     list.sort((a, b) => {
       const aLc = callsByCustomer[a.id]?.[0];
       const bLc = callsByCustomer[b.id]?.[0];
+
+      // Priority 1: Never-called customers come before returning customers
+      const aNeverCalled = !aLc;
+      const bNeverCalled = !bLc;
+      if (aNeverCalled !== bNeverCalled) return aNeverCalled ? -1 : 1;
+
+      // Priority 2: WhatsApp pending top among returning (need follow-up most)
       const aIsPending = aLc?.outcome === 'video_call' && !aLc.videoStatus;
       const bIsPending = bLc?.outcome === 'video_call' && !bLc.videoStatus;
-      // Pending WhatsApp first
-      if (aIsPending && !bIsPending) return -1;
-      if (!aIsPending && bIsPending) return 1;
-      // Then by total spent
+      if (aIsPending !== bIsPending) return aIsPending ? -1 : 1;
+
+      // Priority 3: By total spent (top spenders first)
       const spentDiff = (b.totalSpent || 0) - (a.totalSpent || 0);
       if (spentDiff !== 0) return spentDiff;
+
       // Tie-breaker: created date (newer first)
       return (b.createdAt || 0) - (a.createdAt || 0);
     });
