@@ -401,7 +401,6 @@ window.storage = {
 
 
 
-function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
 // ============ CONSTANTS ============
 const STORAGE_KEYS = {
   CUSTOMERS: 'customers',
@@ -568,6 +567,8 @@ const callCooldownDays = call => {
 // When user provided a scheduledDate (e.g. "coming Saturday"), prefer day-after-scheduled.
 // IMPORTANT: only honor scheduledDate while the call is STILL pending — once visit is
 // marked came/no-show or video is marked sold/no-sale, use the post-completion cooldown days.
+// For resolved calls, cooldown counts from resolvedDate (not original call date) so that
+// if user marks "Aaye" 30 days later, they still get proper post-visit cooldown.
 const cooldownEndDate = call => {
   if (!call) return null;
   const isPendingVideo = call.outcome === 'video_call' && !call.videoStatus;
@@ -582,7 +583,10 @@ const cooldownEndDate = call => {
   }
   const days = callCooldownDays(call);
   if (days === 0) return null;
-  const base = parseLocalYMD(call.date || new Date().toISOString().slice(0, 10));
+  // If call was resolved (came/no_show/sold/failed), count cooldown from resolvedDate
+  // Otherwise from original call date
+  const baseDate = !isPending && call.resolvedDate ? call.resolvedDate : call.date;
+  const base = parseLocalYMD(baseDate || new Date().toISOString().slice(0, 10));
   if (!base) return null;
   base.setDate(base.getDate() + days);
   return base;
@@ -1035,9 +1039,26 @@ export default function App() {
     });
   };
   const updateCall = async (id, updates) => {
+    // When status changes (visitStatus or videoStatus), record when it was resolved
+    // This way cooldown counts from the resolution date, not the original call date
+    let finalUpdates = {
+      ...updates
+    };
+    if ('visitStatus' in updates || 'videoStatus' in updates) {
+      // If resolving (setting a status), record resolvedAt. If unsetting (null), clear it.
+      const isResolving = updates.visitStatus === 'came' || updates.visitStatus === 'no_show' || updates.videoStatus === 'selected' || updates.videoStatus === 'not_selected';
+      if (isResolving) {
+        finalUpdates.resolvedAt = Date.now();
+        finalUpdates.resolvedDate = new Date().toISOString().slice(0, 10);
+      } else {
+        // Unsetting — clear resolved timestamps
+        finalUpdates.resolvedAt = null;
+        finalUpdates.resolvedDate = null;
+      }
+    }
     const next = calls.map(k => k.id === id ? {
       ...k,
-      ...updates
+      ...finalUpdates
     } : k);
     await saveCalls(next);
     if (updates.videoStatus === 'selected') showToast('Marked: Sold ✓');else if (updates.videoStatus === 'not_selected') showToast('Marked: WhatsApp failed');else if (updates.visitStatus === 'came') showToast('Marked: Visited ✓');else if (updates.visitStatus === 'no_show') showToast('Marked: Did not visit');else showToast('Call updated');
@@ -1258,6 +1279,8 @@ export default function App() {
       }
       const existingBillNos = new Set(purchases.map(p => p.billNo).filter(Boolean));
       const newPurchases = [];
+      // Track earliest sale date per phone for auto-visit-mark (only from NEW bills, not duplicates)
+      const earliestSaleByPhone = new Map(); // phone -> YYYY-MM-DD
       let skippedBills = 0;
       bills.forEach(b => {
         if (b.billNo && existingBillNos.has(b.billNo)) {
@@ -1269,10 +1292,11 @@ export default function App() {
         const topCat = Object.entries(b.categories || {}).sort((a, z) => z[1] - a[1])[0];
         const itemsList = (b.items || []).slice(0, 5).join(', ');
         const extra = (b.items?.length || 0) > 5 ? `, +${b.items.length - 5} more` : '';
+        const saleDate = b.date || today();
         newPurchases.push({
           id: uid(),
           customerId: cust.id,
-          date: b.date || today(),
+          date: saleDate,
           amount: Math.round(b.total * 100) / 100,
           category: topCat?.[0] || 'Other',
           paymentMode: 'Cash',
@@ -1281,9 +1305,59 @@ export default function App() {
           createdAt: Date.now()
         });
         if (b.billNo) existingBillNos.add(b.billNo);
+        // Track earliest sale date per phone (for pending visit auto-resolve)
+        const phoneNorm = normalizePhone(b.phone);
+        if (phoneNorm) {
+          const prev = earliestSaleByPhone.get(phoneNorm);
+          if (!prev || saleDate < prev) {
+            earliestSaleByPhone.set(phoneNorm, saleDate);
+          }
+        }
       });
       if (newPurchases.length > 0) {
         await savePurchases([...newPurchases, ...purchases]);
+      }
+
+      // ===== AUTO-MARK PENDING VISITS AS VISITED =====
+      // If a customer with a pending Visit had a NEW sale imported,
+      // mark their LATEST pending visit call as visited.
+      let autoVisitCount = 0;
+      if (earliestSaleByPhone.size > 0 && newPurchases.length > 0) {
+        // Build map: customerId -> customer (using latest customer list)
+        const custById = new Map();
+        [...customersToAdd, ...customers].forEach(c => custById.set(c.id, c));
+
+        // For each phone with a new sale, find that customer's latest pending visit
+        const callsToUpdate = new Map(); // callId -> resolvedDate
+        earliestSaleByPhone.forEach((saleDate, phoneNorm) => {
+          const cust = byPhone.get(phoneNorm);
+          if (!cust) return;
+          // Find all pending visit calls for this customer
+          const pendingVisits = calls.filter(k => k.customerId === cust.id && k.outcome === 'visiting' && !k.visitStatus);
+          if (pendingVisits.length === 0) return;
+          // Sort by createdAt descending (newest first), pick the latest
+          pendingVisits.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+          const latestPending = pendingVisits[0];
+          // Only mark if the sale happened AFTER the visit was promised
+          // (defensive check — normally sale should be after call, but skip if reversed)
+          if (latestPending.date && saleDate < latestPending.date) return;
+          callsToUpdate.set(latestPending.id, saleDate);
+        });
+        if (callsToUpdate.size > 0) {
+          const now = Date.now();
+          const updatedCalls = calls.map(k => {
+            if (!callsToUpdate.has(k.id)) return k;
+            const resolvedDate = callsToUpdate.get(k.id);
+            return {
+              ...k,
+              visitStatus: 'came',
+              resolvedAt: now,
+              resolvedDate
+            };
+          });
+          await saveCalls(updatedCalls);
+          autoVisitCount = callsToUpdate.size;
+        }
       }
       const skippedC = incomingCustomers.length - customersToAdd.length;
       // Build clear summary
@@ -1295,6 +1369,7 @@ export default function App() {
       if (skippedBills > 0) skipParts.push(`${skippedBills} existing bill${skippedBills === 1 ? '' : 's'}`);
       let msg = `Imported ${okParts.join(' + ')}`;
       if (skipParts.length) msg += ` · Skipped ${skipParts.join(' + ')}`;
+      if (autoVisitCount > 0) msg += ` · Auto-marked ${autoVisitCount} pending visit${autoVisitCount === 1 ? '' : 's'} as visited ✓`;
       showToast(msg);
     } finally {
       setImporting(false);
@@ -1508,13 +1583,14 @@ export default function App() {
       });
       if (ok) setCallModal(null);
     }
-  }), confirmModal && /*#__PURE__*/React.createElement(ConfirmModal, _extends({}, confirmModal, {
+  }), confirmModal && /*#__PURE__*/React.createElement(ConfirmModal, {
+    ...confirmModal,
     onClose: () => setConfirmModal(null),
     onConfirm: async () => {
       await confirmModal.onConfirm();
       setConfirmModal(null);
     }
-  })), /*#__PURE__*/React.createElement("input", {
+  }), /*#__PURE__*/React.createElement("input", {
     ref: fileImportRef,
     type: "file",
     accept: ".xlsx,.xls,.csv",
@@ -1549,7 +1625,7 @@ export default function App() {
     className: "h-10 w-10 rounded-full border-4 border-stone-200 border-t-stone-900 animate-spin"
   }), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     className: "font-display text-lg text-stone-900"
-  }, "Importing\u2026"), /*#__PURE__*/React.createElement("div", {
+  }, "Importing…"), /*#__PURE__*/React.createElement("div", {
     className: "text-xs text-stone-500 mt-0.5"
   }, "Saving to your database. Don't close this tab.")))), toast && /*#__PURE__*/React.createElement("div", {
     className: `fixed top-4 left-1/2 -translate-x-1/2 z-50 px-5 py-2.5 rounded-full text-sm font-medium shadow-lg ${toast.kind === 'error' ? 'bg-red-600 text-white' : 'bg-stone-900 text-amber-50'}`
@@ -1945,7 +2021,7 @@ function Dashboard({
     className: "font-medium text-stone-900 truncate"
   }, c.name), /*#__PURE__*/React.createElement("div", {
     className: "text-xs text-stone-500"
-  }, c.visits, " visit", c.visits !== 1 ? 's' : '', " \xB7 last ", formatDate(c.lastVisit))), /*#__PURE__*/React.createElement("div", {
+  }, c.visits, " visit", c.visits !== 1 ? 's' : '', " · last ", formatDate(c.lastVisit))), /*#__PURE__*/React.createElement("div", {
     className: "text-right"
   }, /*#__PURE__*/React.createElement("div", {
     className: "font-mono-num font-semibold text-stone-900"
@@ -2138,7 +2214,7 @@ function CustomersList({
     className: "text-xs text-stone-500 flex items-center gap-1.5 mt-0.5"
   }, /*#__PURE__*/React.createElement(Phone, {
     size: 11
-  }), " ", c.phone, c.tags && c.tags.length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", null, "\xB7"), /*#__PURE__*/React.createElement("span", {
+  }), " ", c.phone, c.tags && c.tags.length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", null, "·"), /*#__PURE__*/React.createElement("span", {
     className: "truncate"
   }, c.tags.join(', '))))), /*#__PURE__*/React.createElement("div", {
     className: "text-right shrink-0"
@@ -2300,7 +2376,7 @@ function CustomerDetail({
     className: "text-xs text-stone-500"
   }, "#", p.billNo)), /*#__PURE__*/React.createElement("div", {
     className: "text-xs text-stone-500 mt-0.5"
-  }, formatDate(p.date), p.notes && /*#__PURE__*/React.createElement("span", null, " \xB7 ", p.notes))), /*#__PURE__*/React.createElement("div", {
+  }, formatDate(p.date), p.notes && /*#__PURE__*/React.createElement("span", null, " · ", p.notes))), /*#__PURE__*/React.createElement("div", {
     className: "font-mono-num font-semibold text-stone-900"
   }, formatINR(p.amount)), /*#__PURE__*/React.createElement("button", {
     onClick: () => onDeletePurchase(p.id),
@@ -2352,7 +2428,7 @@ function CustomerDetail({
       className: "text-xs text-stone-500"
     }, formatDate(call.date))), (call.scheduledDate || call.notes) && /*#__PURE__*/React.createElement("div", {
       className: "text-xs text-stone-500 mt-0.5"
-    }, call.scheduledDate && /*#__PURE__*/React.createElement("span", null, "Scheduled: ", formatDate(call.scheduledDate)), call.scheduledDate && call.notes && /*#__PURE__*/React.createElement("span", null, " \xB7 "), call.notes && /*#__PURE__*/React.createElement("span", null, call.notes))), /*#__PURE__*/React.createElement("button", {
+    }, call.scheduledDate && /*#__PURE__*/React.createElement("span", null, "Scheduled: ", formatDate(call.scheduledDate)), call.scheduledDate && call.notes && /*#__PURE__*/React.createElement("span", null, " · "), call.notes && /*#__PURE__*/React.createElement("span", null, call.notes))), /*#__PURE__*/React.createElement("button", {
       onClick: () => onDeleteCall(call.id),
       className: "opacity-0 group-hover:opacity-100 text-rose-600 hover:bg-rose-50 p-1 rounded transition",
       title: "Delete"
@@ -2364,7 +2440,7 @@ function CustomerDetail({
       className: "text-[11px] font-medium text-amber-900 mb-1.5 flex items-center gap-1.5"
     }, /*#__PURE__*/React.createElement(MessageCircle, {
       size: 12
-    }), " WhatsApp sent \u2014 did they buy?"), /*#__PURE__*/React.createElement("div", {
+    }), " WhatsApp sent — did they buy?"), /*#__PURE__*/React.createElement("div", {
       className: "flex gap-1.5"
     }, /*#__PURE__*/React.createElement("button", {
       onClick: () => onUpdateCall(call.id, {
@@ -2498,7 +2574,7 @@ function AllPurchases({
       className: "font-medium text-stone-900 truncate"
     }, c?.name || 'Unknown customer'), /*#__PURE__*/React.createElement("div", {
       className: "text-xs text-stone-500 flex items-center gap-1.5"
-    }, /*#__PURE__*/React.createElement("span", null, p.category), /*#__PURE__*/React.createElement("span", null, "\xB7"), /*#__PURE__*/React.createElement("span", null, p.paymentMode), p.billNo && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", null, "\xB7"), /*#__PURE__*/React.createElement("span", null, "#", p.billNo))))), /*#__PURE__*/React.createElement("div", {
+    }, /*#__PURE__*/React.createElement("span", null, p.category), /*#__PURE__*/React.createElement("span", null, "·"), /*#__PURE__*/React.createElement("span", null, p.paymentMode), p.billNo && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", null, "·"), /*#__PURE__*/React.createElement("span", null, "#", p.billNo))))), /*#__PURE__*/React.createElement("div", {
       className: "text-right shrink-0"
     }, /*#__PURE__*/React.createElement("div", {
       className: "font-mono-num font-semibold text-stone-900 text-sm"
@@ -2607,7 +2683,7 @@ function Leaderboard({
     className: "font-medium text-stone-900 truncate"
   }, c.name), /*#__PURE__*/React.createElement("div", {
     className: "text-xs text-stone-500"
-  }, c.phone, " \xB7 ", subOf(c))), /*#__PURE__*/React.createElement("div", {
+  }, c.phone, " · ", subOf(c))), /*#__PURE__*/React.createElement("div", {
     className: "text-right shrink-0"
   }, /*#__PURE__*/React.createElement("div", {
     className: "font-mono-num font-semibold text-stone-900"
@@ -2850,7 +2926,11 @@ function CallsView({
         status: latestVisit.visitStatus || 'pending' // pending | came | no_show
       });
     });
-    // Sort: pending first (newest first), then came, then no_show
+    // Sort priority:
+    // 1. Pending customers first (need action)
+    //    - Within pending: OLDEST first (overdue customers need attention most)
+    // 2. Then Came (recent visits)
+    // 3. Then No-show
     list.sort((a, b) => {
       const order = {
         pending: 0,
@@ -2859,6 +2939,9 @@ function CallsView({
       };
       const diff = order[a.status] - order[b.status];
       if (diff !== 0) return diff;
+      // Within pending: OLDEST first (highest daysSince first) — overdue on top
+      if (a.status === 'pending') return b.daysSince - a.daysSince;
+      // Within came/no_show: newest first (most recent activity)
       return (b.call.createdAt || 0) - (a.call.createdAt || 0);
     });
     return list;
@@ -2876,7 +2959,7 @@ function CallsView({
       if (visitFilter === 'pending') return v.status === 'pending';
       if (visitFilter === 'came') return v.status === 'came';
       if (visitFilter === 'no_show') return v.status === 'no_show';
-      if (visitFilter === 'overdue') return v.status === 'pending' && v.daysSince >= 21;
+      if (visitFilter === 'overdue') return v.status === 'pending' && v.daysSince >= 30;
       return true;
     });
   }, [visitsData, searchDebounced, visitFilter]);
@@ -2890,7 +2973,7 @@ function CallsView({
     visitsData.forEach(v => {
       if (v.status === 'came') came++;else if (v.status === 'no_show') noShow++;else {
         pending++;
-        if (v.daysSince >= 21) overdue++;
+        if (v.daysSince >= 30) overdue++;
       }
     });
     // Conversion rate = % of decided customers who actually came
@@ -2989,7 +3072,7 @@ function CallsView({
     className: "font-display text-xl md:text-2xl font-semibold mt-0.5 truncate"
   }, activeQueueCount.toLocaleString('en-IN'), " customers to call"), stats.calledToday > 0 && /*#__PURE__*/React.createElement("div", {
     className: "text-xs text-amber-200/80 mt-0.5"
-  }, stats.calledToday, " done today \xB7 keep going")), /*#__PURE__*/React.createElement("div", {
+  }, stats.calledToday, " done today · keep going")), /*#__PURE__*/React.createElement("div", {
     className: "flex items-center gap-1 text-sm font-medium bg-amber-200 text-stone-900 px-3 py-2 rounded-md shrink-0 ml-3"
   }, "Start ", /*#__PURE__*/React.createElement(ChevronRight, {
     size: 15
@@ -3024,7 +3107,7 @@ function CallsView({
     icon: MessageCircle,
     accent: stats.videoPending > 0 ? 'warn' : null
   }), /*#__PURE__*/React.createElement(StatCard, {
-    label: "Sold \u2713",
+    label: "Sold ✓",
     value: stats.sold,
     icon: Check
   })), /*#__PURE__*/React.createElement("div", {
@@ -3235,14 +3318,14 @@ function CallsView({
     className: `text-left rounded-lg border p-3 transition ${visitFilter === 'came' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-emerald-50 border-emerald-200 hover:border-emerald-400'}`
   }, /*#__PURE__*/React.createElement("div", {
     className: `text-[10px] uppercase tracking-wider ${visitFilter === 'came' ? 'text-emerald-100' : 'text-emerald-700'}`
-  }, "Visited \u2713"), /*#__PURE__*/React.createElement("div", {
+  }, "Visited ✓"), /*#__PURE__*/React.createElement("div", {
     className: `text-2xl font-display mt-0.5 ${visitFilter === 'came' ? 'text-white' : 'text-emerald-900'}`
   }, visitStats.came)), /*#__PURE__*/React.createElement("button", {
     onClick: () => setVisitFilter('no_show'),
     className: `text-left rounded-lg border p-3 transition ${visitFilter === 'no_show' ? 'bg-rose-600 text-white border-rose-600' : 'bg-rose-50 border-rose-200 hover:border-rose-400'}`
   }, /*#__PURE__*/React.createElement("div", {
     className: `text-[10px] uppercase tracking-wider ${visitFilter === 'no_show' ? 'text-rose-100' : 'text-rose-700'}`
-  }, "No-show \u2717"), /*#__PURE__*/React.createElement("div", {
+  }, "No-show ✗"), /*#__PURE__*/React.createElement("div", {
     className: `text-2xl font-display mt-0.5 ${visitFilter === 'no_show' ? 'text-white' : 'text-rose-900'}`
   }, visitStats.noShow))), visitStats.overdue > 0 && visitFilter !== 'overdue' && /*#__PURE__*/React.createElement("button", {
     onClick: () => setVisitFilter('overdue'),
@@ -3251,7 +3334,7 @@ function CallsView({
     className: "inline-flex items-center gap-1.5"
   }, /*#__PURE__*/React.createElement(AlertCircle, {
     size: 14
-  }), " ", /*#__PURE__*/React.createElement("strong", null, visitStats.overdue), " customers promised to visit but haven't come in 21+ days"), /*#__PURE__*/React.createElement(ChevronRight, {
+  }), " ", /*#__PURE__*/React.createElement("strong", null, visitStats.overdue), " customers promised to visit but haven't come in 30+ days"), /*#__PURE__*/React.createElement(ChevronRight, {
     size: 14
   })), visitsFiltered.length === 0 ? /*#__PURE__*/React.createElement("div", {
     className: "bg-white border border-stone-200 rounded-lg py-12 text-center text-stone-500 text-sm"
@@ -3262,7 +3345,7 @@ function CallsView({
   }, visitsFiltered.slice(0, visitsVisibleCount).map(v => {
     const c = v.customer;
     const k = v.call;
-    const isOverdue = v.status === 'pending' && v.daysSince >= 21;
+    const isOverdue = v.status === 'pending' && v.daysSince >= 30;
     return /*#__PURE__*/React.createElement("li", {
       key: c.id,
       className: "p-3"
@@ -3281,9 +3364,9 @@ function CallsView({
       className: "font-mono-num"
     }, c.phone), /*#__PURE__*/React.createElement("span", {
       className: "text-stone-300"
-    }, "\xB7"), /*#__PURE__*/React.createElement("span", null, "Promised ", v.daysSince === 0 ? 'today' : `${v.daysSince}d ago`), k.scheduledDate && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
+    }, "·"), /*#__PURE__*/React.createElement("span", null, "Promised ", v.daysSince === 0 ? 'today' : `${v.daysSince}d ago`), k.scheduledDate && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
       className: "text-stone-300"
-    }, "\xB7"), /*#__PURE__*/React.createElement("span", null, "for ", new Date(k.scheduledDate + 'T00:00:00').toLocaleDateString('en-IN', {
+    }, "·"), /*#__PURE__*/React.createElement("span", null, "for ", new Date(k.scheduledDate + 'T00:00:00').toLocaleDateString('en-IN', {
       day: 'numeric',
       month: 'short'
     })))), k.notes && /*#__PURE__*/React.createElement("div", {
@@ -3330,7 +3413,7 @@ function CallsView({
         visitStatus: null
       }),
       className: "text-[11px] text-stone-500 hover:text-stone-700 underline"
-    }, "\u21BA Reset to pending")));
+    }, "↺ Reset to pending")));
   })), visitsFiltered.length > visitsVisibleCount && /*#__PURE__*/React.createElement("div", {
     className: "px-4 py-4 bg-stone-50 border-t border-stone-200 text-center"
   }, /*#__PURE__*/React.createElement("button", {
@@ -3373,11 +3456,11 @@ function CallsView({
       className: `inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] ${display.badge}`
     }, Icon && /*#__PURE__*/React.createElement(Icon, {
       size: 9
-    }), display.label, " \xB7 ", shortAgo(lc.date)), lc && isInCooldown(lc) && /*#__PURE__*/React.createElement("span", {
+    }), display.label, " · ", shortAgo(lc.date)), lc && isInCooldown(lc) && /*#__PURE__*/React.createElement("span", {
       className: "text-[10px] text-stone-400"
     }, "back in ", daysUntilBackInQueue(lc), "d"), !lc && c.totalSpent > 0 && /*#__PURE__*/React.createElement("span", {
       className: "text-[10px] text-stone-400"
-    }, "\xB7 ", formatINR(c.totalSpent)))))), /*#__PURE__*/React.createElement("div", {
+    }, "· ", formatINR(c.totalSpent)))))), /*#__PURE__*/React.createElement("div", {
       className: "flex flex-wrap gap-1.5"
     }, /*#__PURE__*/React.createElement("a", {
       href: telLink,
@@ -3404,7 +3487,7 @@ function CallsView({
       onClick: () => quickLog(c.id, 'not_confirm'),
       disabled: savingKey === c.id + '|not_confirm',
       className: "flex-1 min-w-[80px] py-2 text-xs font-medium rounded-md border bg-violet-50 text-violet-800 hover:bg-violet-100 border-violet-200 flex items-center justify-center gap-1.5 transition disabled:opacity-50 disabled:cursor-not-allowed",
-      title: "Not yet confirmed \u2014 retry in 5 days"
+      title: "Not yet confirmed — retry in 5 days"
     }, savingKey === c.id + '|not_confirm' ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
       className: "inline-block h-3 w-3 border-2 border-violet-700 border-t-transparent rounded-full animate-spin"
     }), " Saving") : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(AlertCircle, {
@@ -3413,7 +3496,7 @@ function CallsView({
       onClick: () => quickLog(c.id, 'busy'),
       disabled: savingKey === c.id + '|busy',
       className: "flex-1 min-w-[70px] py-2 text-xs font-medium rounded-md border bg-orange-50 text-orange-800 hover:bg-orange-100 border-orange-200 flex items-center justify-center gap-1.5 transition disabled:opacity-50 disabled:cursor-not-allowed",
-      title: "Customer busy \u2014 call back tomorrow"
+      title: "Customer busy — call back tomorrow"
     }, savingKey === c.id + '|busy' ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
       className: "inline-block h-3 w-3 border-2 border-orange-700 border-t-transparent rounded-full animate-spin"
     }), " Saving") : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(Clock, {
@@ -3422,7 +3505,7 @@ function CallsView({
       onClick: () => quickLog(c.id, 'no_answer'),
       disabled: savingKey === c.id + '|no_answer',
       className: "flex-1 min-w-[70px] py-2 text-xs font-medium rounded-md border bg-amber-50 text-amber-800 hover:bg-amber-100 border-amber-200 flex items-center justify-center gap-1.5 transition disabled:opacity-50 disabled:cursor-not-allowed",
-      title: "No answer \u2014 retry in 3 days"
+      title: "No answer — retry in 3 days"
     }, savingKey === c.id + '|no_answer' ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
       className: "inline-block h-3 w-3 border-2 border-amber-700 border-t-transparent rounded-full animate-spin"
     }), " Saving") : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(PhoneOff, {
@@ -3439,7 +3522,7 @@ function CallsView({
       className: "text-[11px] font-medium text-amber-900 mb-1.5 flex items-center gap-1.5"
     }, /*#__PURE__*/React.createElement(MessageCircle, {
       size: 12
-    }), " WhatsApp sent \u2014 did they buy?"), /*#__PURE__*/React.createElement("div", {
+    }), " WhatsApp sent — did they buy?"), /*#__PURE__*/React.createElement("div", {
       className: "flex gap-1.5"
     }, /*#__PURE__*/React.createElement("button", {
       onClick: () => onUpdateCall(lc.id, {
@@ -3592,9 +3675,9 @@ function SettingsView({
     className: "text-sm text-stone-600 mb-2"
   }, "Two formats are auto-detected:"), /*#__PURE__*/React.createElement("ul", {
     className: "text-sm text-stone-600 mb-3 space-y-1 pl-1"
-  }, /*#__PURE__*/React.createElement("li", null, "\u2022 ", /*#__PURE__*/React.createElement("strong", null, "POS bill export"), " \u2014 your billing software export (BILL NO., BILL DATE, RCU NAME, RCU MOBILE NO., ITEM NAME, NET SALE VALUE, etc.). Customers and bills are extracted together."), /*#__PURE__*/React.createElement("li", null, "\u2022 ", /*#__PURE__*/React.createElement("strong", null, "Simple list"), " \u2014 just Name + Phone columns (optional: Birthday, Anniversary, Notes)")), /*#__PURE__*/React.createElement("p", {
+  }, /*#__PURE__*/React.createElement("li", null, "• ", /*#__PURE__*/React.createElement("strong", null, "POS bill export"), " — your billing software export (BILL NO., BILL DATE, RCU NAME, RCU MOBILE NO., ITEM NAME, NET SALE VALUE, etc.). Customers and bills are extracted together."), /*#__PURE__*/React.createElement("li", null, "• ", /*#__PURE__*/React.createElement("strong", null, "Simple list"), " — just Name + Phone columns (optional: Birthday, Anniversary, Notes)")), /*#__PURE__*/React.createElement("p", {
     className: "text-xs text-stone-500 mb-3"
-  }, "Duplicates (by phone or bill no.) are skipped \u2014 you can safely re-import the same file or a newer export with overlapping data."), /*#__PURE__*/React.createElement("button", {
+  }, "Duplicates (by phone or bill no.) are skipped — you can safely re-import the same file or a newer export with overlapping data."), /*#__PURE__*/React.createElement("button", {
     onClick: onTriggerImport,
     className: "px-4 py-2 bg-stone-900 text-amber-50 rounded-md text-sm font-medium hover:bg-stone-800 inline-flex items-center gap-2"
   }, /*#__PURE__*/React.createElement(Upload, {
@@ -3904,7 +3987,7 @@ function PurchaseFormModal({
   }, /*#__PURE__*/React.createElement("div", {
     className: "grid grid-cols-2 gap-3"
   }, /*#__PURE__*/React.createElement(Field, {
-    label: "Amount (\u20B9)",
+    label: "Amount (₹)",
     required: true
   }, /*#__PURE__*/React.createElement("input", {
     autoFocus: true,
@@ -4035,7 +4118,7 @@ function QuickAddModal({
     className: "font-medium text-stone-900 truncate"
   }, c.name), /*#__PURE__*/React.createElement("div", {
     className: "text-xs text-stone-500"
-  }, c.phone, " \xB7 ", c.visits, " visit", c.visits !== 1 ? 's' : '')), /*#__PURE__*/React.createElement("div", {
+  }, c.phone, " · ", c.visits, " visit", c.visits !== 1 ? 's' : '')), /*#__PURE__*/React.createElement("div", {
     className: "text-xs font-mono-num text-stone-700"
   }, formatINR(c.totalSpent)))))) : /*#__PURE__*/React.createElement("div", {
     className: "p-4 text-center"
@@ -4064,7 +4147,7 @@ function QuickAddModal({
   }, /*#__PURE__*/React.createElement("div", {
     className: "grid grid-cols-2 gap-3"
   }, /*#__PURE__*/React.createElement(Field, {
-    label: "Amount (\u20B9)",
+    label: "Amount (₹)",
     required: true
   }, /*#__PURE__*/React.createElement("input", {
     autoFocus: true,
@@ -4217,7 +4300,7 @@ function CallFormModal({
     }));
   })), /*#__PURE__*/React.createElement("p", {
     className: "text-[11px] text-stone-500 mt-2"
-  }, "If customer wasn't interested, just leave this \u2014 they'll stay in your queue for retry later.")), /*#__PURE__*/React.createElement("div", {
+  }, "If customer wasn't interested, just leave this — they'll stay in your queue for retry later.")), /*#__PURE__*/React.createElement("div", {
     className: "grid grid-cols-2 gap-3"
   }, /*#__PURE__*/React.createElement(Field, {
     label: "Call date"
