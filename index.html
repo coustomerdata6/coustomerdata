@@ -728,6 +728,23 @@ export default function App() {
   const [customers, setCustomers] = useState([]);
   const [purchases, setPurchases] = useState([]);
   const [calls, setCalls] = useState([]);
+
+  // CRITICAL: Refs that ALWAYS reflect latest state - prevents stale closure race conditions
+  // When user makes rapid changes (e.g., 30 calls in a row), React state hasn't updated yet
+  // when the next handler fires. Reading from refs guarantees we get the LATEST list.
+  const customersRef = useRef([]);
+  const purchasesRef = useRef([]);
+  const callsRef = useRef([]);
+  // Keep refs synced with state
+  useEffect(() => {
+    customersRef.current = customers;
+  }, [customers]);
+  useEffect(() => {
+    purchasesRef.current = purchases;
+  }, [purchases]);
+  useEffect(() => {
+    callsRef.current = calls;
+  }, [calls]);
   const [loading, setLoading] = useState(true);
   const [isAuthed, setIsAuthed] = useState(false);
   const [view, setView] = useState('dashboard');
@@ -785,14 +802,27 @@ export default function App() {
         // STEP 2: Signed in — load data in parallel
         const [cRes, pRes, kRes] = await Promise.all([window.storage.get(STORAGE_KEYS.CUSTOMERS).catch(() => null), window.storage.get(STORAGE_KEYS.PURCHASES).catch(() => null), window.storage.get(STORAGE_KEYS.CALLS).catch(() => null)]);
         if (cancelled) return;
+        // Parse then sync BOTH state and ref together (ref sync must happen synchronously)
         try {
-          if (cRes?.value) setCustomers(JSON.parse(cRes.value));
+          if (cRes?.value) {
+            const parsed = JSON.parse(cRes.value);
+            customersRef.current = parsed;
+            setCustomers(parsed);
+          }
         } catch (e) {}
         try {
-          if (pRes?.value) setPurchases(JSON.parse(pRes.value));
+          if (pRes?.value) {
+            const parsed = JSON.parse(pRes.value);
+            purchasesRef.current = parsed;
+            setPurchases(parsed);
+          }
         } catch (e) {}
         try {
-          if (kRes?.value) setCalls(JSON.parse(kRes.value));
+          if (kRes?.value) {
+            const parsed = JSON.parse(kRes.value);
+            callsRef.current = parsed;
+            setCalls(parsed);
+          }
         } catch (e) {}
       } finally {
         clearTimeout(safetyTimer);
@@ -809,18 +839,36 @@ export default function App() {
   useEffect(() => {
     if (!isAuthed) return;
     if (customers.length > 0 || purchases.length > 0 || calls.length > 0) return;
+    let cancelled = false;
     (async () => {
       const [cRes, pRes, kRes] = await Promise.all([window.storage.get(STORAGE_KEYS.CUSTOMERS).catch(() => null), window.storage.get(STORAGE_KEYS.PURCHASES).catch(() => null), window.storage.get(STORAGE_KEYS.CALLS).catch(() => null)]);
+      if (cancelled) return; // user logged out mid-load, don't set stale data
+      // Parse then sync BOTH state and ref together
       try {
-        if (cRes?.value) setCustomers(JSON.parse(cRes.value));
+        if (cRes?.value) {
+          const parsed = JSON.parse(cRes.value);
+          customersRef.current = parsed;
+          setCustomers(parsed);
+        }
       } catch (e) {}
       try {
-        if (pRes?.value) setPurchases(JSON.parse(pRes.value));
+        if (pRes?.value) {
+          const parsed = JSON.parse(pRes.value);
+          purchasesRef.current = parsed;
+          setPurchases(parsed);
+        }
       } catch (e) {}
       try {
-        if (kRes?.value) setCalls(JSON.parse(kRes.value));
+        if (kRes?.value) {
+          const parsed = JSON.parse(kRes.value);
+          callsRef.current = parsed;
+          setCalls(parsed);
+        }
       } catch (e) {}
     })();
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthed]);
   const handleLogin = async () => {
@@ -833,6 +881,13 @@ export default function App() {
       if (window._supabase) await window._supabase.auth.signOut();
     } catch (e) {}
     // Clear local data so next user sees fresh screen
+    // IMPORTANT: sync refs too, otherwise stale data will leak into next session
+    customersRef.current = [];
+    purchasesRef.current = [];
+    callsRef.current = [];
+    // Reset save cache so a fresh login can rewrite same-value keys
+    lastSavedRef.current = {};
+    latestListRef.current = {};
     setIsAuthed(false);
     setCustomers([]);
     setPurchases([]);
@@ -851,41 +906,67 @@ export default function App() {
   };
 
   // ===== Save helpers =====
+  // Warn user if they try to close the tab while a save is in flight
+  const pendingSavesRef = useRef(0);
+  useEffect(() => {
+    const handler = e => {
+      if (pendingSavesRef.current > 0) {
+        e.preventDefault();
+        e.returnValue = 'Save in progress. Close now = data may be lost.';
+        return e.returnValue;
+      }
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, []);
+
   // Cache last-saved JSON per key, so we don't waste a network round-trip
   // saving identical data (e.g. toggling a tag that was already set).
   const lastSavedRef = useRef({});
+  // Save queue per key - prevents race conditions where a stale save overwrites a newer one
+  const saveQueueRef = useRef({});
+  // Track the latest list per key so if multiple saves are queued, only the last one persists
+  const latestListRef = useRef({});
+  const enqueueSave = (key, list) => {
+    latestListRef.current[key] = list;
+    pendingSavesRef.current++;
+    const doSave = async () => {
+      try {
+        // Skip if a newer save has been queued in the meantime
+        if (latestListRef.current[key] !== list) return;
+        const json = JSON.stringify(list);
+        if (lastSavedRef.current[key] === json) return;
+        lastSavedRef.current[key] = json;
+        try {
+          await window.storage.set(key, json);
+        } catch (e) {
+          // Reset cache so next save retries
+          lastSavedRef.current[key] = null;
+          showToast('Save failed - check connection', 'error');
+          throw e;
+        }
+      } finally {
+        pendingSavesRef.current--;
+      }
+    };
+    const prev = saveQueueRef.current[key] || Promise.resolve();
+    saveQueueRef.current[key] = prev.then(doSave).catch(() => {}); // catch prevents queue break
+    return saveQueueRef.current[key];
+  };
   const saveCustomers = async list => {
+    customersRef.current = list; // sync ref BEFORE state update so next handler sees latest
     setCustomers(list);
-    try {
-      const json = JSON.stringify(list);
-      if (lastSavedRef.current[STORAGE_KEYS.CUSTOMERS] === json) return;
-      lastSavedRef.current[STORAGE_KEYS.CUSTOMERS] = json;
-      await window.storage.set(STORAGE_KEYS.CUSTOMERS, json);
-    } catch (e) {
-      showToast('Save failed', 'error');
-    }
+    await enqueueSave(STORAGE_KEYS.CUSTOMERS, list);
   };
   const savePurchases = async list => {
+    purchasesRef.current = list;
     setPurchases(list);
-    try {
-      const json = JSON.stringify(list);
-      if (lastSavedRef.current[STORAGE_KEYS.PURCHASES] === json) return;
-      lastSavedRef.current[STORAGE_KEYS.PURCHASES] = json;
-      await window.storage.set(STORAGE_KEYS.PURCHASES, json);
-    } catch (e) {
-      showToast('Save failed', 'error');
-    }
+    await enqueueSave(STORAGE_KEYS.PURCHASES, list);
   };
   const saveCalls = async list => {
+    callsRef.current = list;
     setCalls(list);
-    try {
-      const json = JSON.stringify(list);
-      if (lastSavedRef.current[STORAGE_KEYS.CALLS] === json) return;
-      lastSavedRef.current[STORAGE_KEYS.CALLS] = json;
-      await window.storage.set(STORAGE_KEYS.CALLS, json);
-    } catch (e) {
-      showToast('Save failed', 'error');
-    }
+    await enqueueSave(STORAGE_KEYS.CALLS, list);
   };
 
   // ===== Customer actions =====
@@ -901,13 +982,13 @@ export default function App() {
     }
 
     // Check duplicate phone (except when editing same)
-    const dup = customers.find(c => normalizePhone(c.phone) === phone && c.id !== data.id);
+    const dup = customersRef.current.find(c => normalizePhone(c.phone) === phone && c.id !== data.id);
     if (dup) {
       showToast(`Phone already exists: ${dup.name}`, 'error');
       return null;
     }
     if (data.id) {
-      const next = customers.map(c => c.id === data.id ? {
+      const next = customersRef.current.map(c => c.id === data.id ? {
         ...c,
         ...data,
         phone
@@ -926,15 +1007,15 @@ export default function App() {
         notes: data.notes || '',
         createdAt: Date.now()
       };
-      await saveCustomers([newC, ...customers]);
+      await saveCustomers([newC, ...customersRef.current]);
       showToast('Customer added');
       return newC.id;
     }
   };
   const deleteCustomer = async id => {
-    const c = customers.find(x => x.id === id);
-    const pCount = purchases.filter(p => p.customerId === id).length;
-    const cCount = calls.filter(k => k.customerId === id).length;
+    const c = customersRef.current.find(x => x.id === id);
+    const pCount = purchasesRef.current.filter(p => p.customerId === id).length;
+    const cCount = callsRef.current.filter(k => k.customerId === id).length;
     const parts = [];
     if (pCount > 0) parts.push(`${pCount} purchase${pCount === 1 ? '' : 's'}`);
     if (cCount > 0) parts.push(`${cCount} call${cCount === 1 ? '' : 's'}`);
@@ -943,9 +1024,9 @@ export default function App() {
       title: 'Delete customer?',
       message: `This will permanently delete ${c?.name}${detail}. Cannot be undone.`,
       onConfirm: async () => {
-        await saveCustomers(customers.filter(c => c.id !== id));
-        await savePurchases(purchases.filter(p => p.customerId !== id));
-        await saveCalls(calls.filter(k => k.customerId !== id));
+        await saveCustomers(customersRef.current.filter(c => c.id !== id));
+        await savePurchases(purchasesRef.current.filter(p => p.customerId !== id));
+        await saveCalls(callsRef.current.filter(k => k.customerId !== id));
         setSelectedCustomerId(null);
         if (view === 'customer-detail') setView('customers');
         showToast('Customer deleted');
@@ -975,7 +1056,7 @@ export default function App() {
       notes: data.notes || '',
       createdAt: Date.now()
     };
-    await savePurchases([newP, ...purchases]);
+    await savePurchases([newP, ...purchasesRef.current]);
     showToast('Purchase added');
     return true;
   };
@@ -984,7 +1065,7 @@ export default function App() {
       title: 'Delete purchase?',
       message: 'This purchase record will be permanently removed.',
       onConfirm: async () => {
-        await savePurchases(purchases.filter(p => p.id !== id));
+        await savePurchases(purchasesRef.current.filter(p => p.id !== id));
         showToast('Purchase deleted');
       }
     });
@@ -1001,12 +1082,15 @@ export default function App() {
       return false;
     }
 
+    // CRITICAL: Read from ref, not closure - prevents data loss on rapid clicks
+    const currentCalls = callsRef.current;
+
     // Smart deduplication: if the same customer was just logged in the last 60 seconds,
     // REPLACE that recent entry instead of adding a duplicate. Prevents accidental double-clicks
     // (or network-slow clicks) from creating multiple entries.
     const now = Date.now();
     const RECENT_WINDOW_MS = 60 * 1000; // 60 seconds
-    const recentDuplicate = calls.find(k => k.customerId === data.customerId && now - (k.createdAt || 0) < RECENT_WINDOW_MS);
+    const recentDuplicate = currentCalls.find(k => k.customerId === data.customerId && now - (k.createdAt || 0) < RECENT_WINDOW_MS);
     const newCall = {
       id: recentDuplicate ? recentDuplicate.id : uid(),
       customerId: data.customerId,
@@ -1018,11 +1102,11 @@ export default function App() {
     };
     if (recentDuplicate) {
       // Replace the recent entry — same customer, recent click
-      const next = calls.map(k => k.id === recentDuplicate.id ? newCall : k);
+      const next = currentCalls.map(k => k.id === recentDuplicate.id ? newCall : k);
       await saveCalls(next);
     } else {
       // New entry
-      await saveCalls([newCall, ...calls]);
+      await saveCalls([newCall, ...currentCalls]);
     }
     const label = CALL_OUTCOMES.find(o => o.id === data.outcome)?.label || 'Call';
     showToast(`Logged: ${label}`);
@@ -1033,7 +1117,7 @@ export default function App() {
       title: 'Delete call?',
       message: 'This call record will be removed.',
       onConfirm: async () => {
-        await saveCalls(calls.filter(k => k.id !== id));
+        await saveCalls(callsRef.current.filter(k => k.id !== id));
         showToast('Call deleted');
       }
     });
@@ -1056,7 +1140,8 @@ export default function App() {
         finalUpdates.resolvedDate = null;
       }
     }
-    const next = calls.map(k => k.id === id ? {
+    // Read from ref for race safety
+    const next = callsRef.current.map(k => k.id === id ? {
       ...k,
       ...finalUpdates
     } : k);
@@ -1271,13 +1356,13 @@ export default function App() {
     // Show a clear "importing" indicator while we save (saves go to network)
     setImporting(true);
     try {
-      const byPhone = new Map(customers.map(c => [normalizePhone(c.phone), c]));
+      const byPhone = new Map(customersRef.current.map(c => [normalizePhone(c.phone), c]));
       const customersToAdd = incomingCustomers.filter(c => !byPhone.has(normalizePhone(c.phone)));
       customersToAdd.forEach(c => byPhone.set(normalizePhone(c.phone), c));
       if (customersToAdd.length > 0) {
-        await saveCustomers([...customersToAdd, ...customers]);
+        await saveCustomers([...customersToAdd, ...customersRef.current]);
       }
-      const existingBillNos = new Set(purchases.map(p => p.billNo).filter(Boolean));
+      const existingBillNos = new Set(purchasesRef.current.map(p => p.billNo).filter(Boolean));
       const newPurchases = [];
       // Track earliest sale date per phone for auto-visit-mark (only from NEW bills, not duplicates)
       const earliestSaleByPhone = new Map(); // phone -> YYYY-MM-DD
@@ -1315,7 +1400,7 @@ export default function App() {
         }
       });
       if (newPurchases.length > 0) {
-        await savePurchases([...newPurchases, ...purchases]);
+        await savePurchases([...newPurchases, ...purchasesRef.current]);
       }
 
       // ===== AUTO-MARK PENDING VISITS AS VISITED =====
@@ -1325,7 +1410,7 @@ export default function App() {
       if (earliestSaleByPhone.size > 0 && newPurchases.length > 0) {
         // Build map: customerId -> customer (using latest customer list)
         const custById = new Map();
-        [...customersToAdd, ...customers].forEach(c => custById.set(c.id, c));
+        [...customersToAdd, ...customersRef.current].forEach(c => custById.set(c.id, c));
 
         // For each phone with a new sale, find that customer's latest pending visit
         const callsToUpdate = new Map(); // callId -> resolvedDate
@@ -1333,7 +1418,7 @@ export default function App() {
           const cust = byPhone.get(phoneNorm);
           if (!cust) return;
           // Find all pending visit calls for this customer
-          const pendingVisits = calls.filter(k => k.customerId === cust.id && k.outcome === 'visiting' && !k.visitStatus);
+          const pendingVisits = callsRef.current.filter(k => k.customerId === cust.id && k.outcome === 'visiting' && !k.visitStatus);
           if (pendingVisits.length === 0) return;
           // Sort by createdAt descending (newest first), pick the latest
           pendingVisits.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
@@ -1345,7 +1430,7 @@ export default function App() {
         });
         if (callsToUpdate.size > 0) {
           const now = Date.now();
-          const updatedCalls = calls.map(k => {
+          const updatedCalls = callsRef.current.map(k => {
             if (!callsToUpdate.has(k.id)) return k;
             const resolvedDate = callsToUpdate.get(k.id);
             return {
